@@ -12,6 +12,7 @@ service Driver {
   // We put all communication on gRPC for unification in the end.
   rpc Init(InitRequest) returns (InitResponse);
   rpc Close(CloseRequest) returns (Empty);
+  rpc KillProcess(KillProcessRequest) returns (KillProcessResponse);
 
   // db audit
   rpc Parse(ParseRequest) returns (ParseResponse);
@@ -39,12 +40,13 @@ message Session {
 }
 
 enum OptionalModule {
-    GenRollbackSQL = 0;
-    Query = 1;
-    Explain = 2;
-    GetTableMeta = 3;
-    ExtractTableFromSQL = 4;
-    EstimateSQLAffectRows = 5;
+  GenRollbackSQL = 0;
+  Query = 1;
+  Explain = 2;
+  GetTableMeta = 3;
+  ExtractTableFromSQL = 4;
+  EstimateSQLAffectRows = 5;
+  KillProcess = 6;
 }
 
 message Param {
@@ -70,6 +72,11 @@ message Rule {
   string category = 4;
   repeated Param params = 5;
   string annotation = 6;
+  Knowledge knowledge = 7;
+}
+
+message Knowledge {
+  string content = 1;
 }
 
 // Metas
@@ -79,9 +86,10 @@ message MetasResponse {
   repeated Param databaseAdditionalParams = 3;
   repeated Rule rules = 4;
   repeated OptionalModule enabledOptionalModule = 5;
+  bytes logo = 6;
 }
 
-// Init 
+// Init
 message InitRequest {
   DSN dsn = 1;
   repeated Rule rules = 2;
@@ -93,6 +101,11 @@ message InitResponse {
 
 // Close
 message CloseRequest {
+  Session session = 1;
+}
+
+// Kill
+message KillProcessRequest {
   Session session = 1;
 }
 
@@ -110,6 +123,7 @@ message Node {
   string text = 1;
   string type = 2;
   string fingerprint = 3;
+  uint64 startLine = 4;
 }
 
 message ParseResponse {
@@ -133,7 +147,7 @@ message AuditResult {
 }
 
 message AuditResults {
-  repeated AuditResult results = 1;    
+  repeated AuditResult results = 1;
 }
 
 message AuditResponse {
@@ -143,7 +157,7 @@ message AuditResponse {
 // GenRollbackSQL
 message NeedRollbackSQL {
   string query = 1;
-} 
+}
 
 message GenRollbackSQLRequest {
   Session session = 1;
@@ -153,7 +167,7 @@ message GenRollbackSQLRequest {
 message RollbackSQL {
   string query = 1;
   string message = 2;
-} 
+}
 
 message GenRollbackSQLResponse {
   RollbackSQL sql = 1;
@@ -161,7 +175,7 @@ message GenRollbackSQLResponse {
 
 // Ping
 message PingRequest {
-  Session session = 1;  
+  Session session = 1;
 }
 
 // Exec
@@ -223,9 +237,9 @@ message QueryResultValue {
   string value = 1;
 }
 
-// explain 
+// explain
 message ExplainSQL {
-  string query = 1;  
+  string query = 1;
 }
 
 message ExplainRequest {
@@ -257,7 +271,7 @@ message GetDatabasesResponse {
 // GetTableMeta
 message Table {
   string name = 1;
-  string schema = 2;  
+  string schema = 2;
 }
 
 message GetTableMetaRequest {
@@ -295,12 +309,12 @@ message TabularDataRows {
 
 message TabularData {
   repeated TabularDataHead columns = 1;
-  repeated TabularDataRows rows = 2;  
+  repeated TabularDataRows rows = 2;
 }
 
 // ExtractTableFromSQL
 message ExtractedSQL {
-  string query = 1;  
+  string query = 1;
 }
 
 message ExtractTableFromSQLRequest {
@@ -325,4 +339,8 @@ message EstimateSQLAffectRowsRequest {
 message EstimateSQLAffectRowsResponse {
   int64 count = 1;
   string errMessage = 2; // 记录执行失败原因
+}
+
+message KillProcessResponse {
+  string errMessage = 1; // 记录执行失败原因
 }

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/actiontech/sqle/sqle/dms"
 	"github.com/actiontech/sqle/sqle/driver/mysql/executor"
 	driverV2 "github.com/actiontech/sqle/sqle/driver/v2"
 	"github.com/actiontech/sqle/sqle/errors"
@@ -39,7 +40,7 @@ var errNoSQLNeedToBeAudited = errors.New(errors.DataConflict, fmt.Errorf("there 
 type Task interface {
 	Start() error
 	Stop() error
-	Audit() (*model.AuditPlanReportV2, error)
+	Audit() (*AuditResultResp, error)
 	FullSyncSQLs([]*SQL) error
 	PartialSyncSQLs([]*SQL) error
 	GetSQLs(map[string]interface{}) ([]Head, []map[string] /* head name */ string, uint64, error)
@@ -54,6 +55,7 @@ type Head struct {
 type SQL struct {
 	SQLContent  string
 	Fingerprint string
+	Schema      string
 	Info        map[string]interface{}
 }
 
@@ -92,7 +94,13 @@ func (at *baseTask) Stop() error {
 	return nil
 }
 
-func (at *baseTask) audit(task *model.Task) (*model.AuditPlanReportV2, error) {
+type AuditResultResp struct {
+	AuditPlanID  uint64
+	Task         *model.Task
+	FilteredSqls []*model.AuditPlanSQLV2
+}
+
+func (at *baseTask) audit(task *model.Task) (*AuditResultResp, error) {
 	auditPlanSQLs, err := at.persist.GetAuditPlanSQLs(at.ap.ID)
 	if err != nil {
 		return nil, err
@@ -125,24 +133,11 @@ func (at *baseTask) audit(task *model.Task) (*model.AuditPlanReportV2, error) {
 		return nil, err
 	}
 
-	auditPlanReport := &model.AuditPlanReportV2{
-		AuditPlanID: at.ap.ID,
-		PassRate:    task.PassRate,
-		Score:       task.Score,
-		AuditLevel:  task.AuditLevel,
-	}
-	for i, executeSQL := range task.ExecuteSQLs {
-		auditPlanReport.AuditPlanReportSQLs = append(auditPlanReport.AuditPlanReportSQLs, &model.AuditPlanReportSQLV2{
-			SQL:          executeSQL.Content,
-			Number:       uint(i + 1),
-			AuditResults: executeSQL.AuditResults,
-		})
-	}
-	err = at.persist.Save(auditPlanReport)
-	if err != nil {
-		return nil, err
-	}
-	return auditPlanReport, nil
+	return &AuditResultResp{
+		AuditPlanID:  uint64(at.ap.ID),
+		Task:         task,
+		FilteredSqls: filteredSqls,
+	}, nil
 }
 
 func filterSQLsByPeriod(params params.Params, sqls []*model.AuditPlanSQLV2) (filteredSqls []*model.AuditPlanSQLV2, err error) {
@@ -266,14 +261,16 @@ func NewDefaultTask(entry *logrus.Entry, ap *model.AuditPlan) Task {
 	return &DefaultTask{newBaseTask(entry, ap)}
 }
 
-func (at *DefaultTask) Audit() (*model.AuditPlanReportV2, error) {
+func (at *DefaultTask) Audit() (*AuditResultResp, error) {
 	var task *model.Task
 	if at.ap.InstanceName == "" {
 		task = &model.Task{
 			DBType: at.ap.DBType,
 		}
 	} else {
-		instance, _, err := at.persist.GetInstanceByNameAndProjectID(at.ap.InstanceName, at.ap.ProjectId)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+		defer cancel()
+		instance, _, err := dms.GetInstanceInProjectByName(ctx, string(at.ap.ProjectId), at.ap.InstanceName)
 		if err != nil {
 			return nil, err
 		}
@@ -293,18 +290,20 @@ func convertSQLsToModelSQLs(sqls []*SQL) []*model.AuditPlanSQLV2 {
 		as[i] = &model.AuditPlanSQLV2{
 			Fingerprint: sql.Fingerprint,
 			SQLContent:  sql.SQLContent,
+			Schema:      sql.Schema,
 			Info:        data,
 		}
 	}
 	return as
 }
 
-func convertRawSQLToModelSQLs(sqls []string) []*model.AuditPlanSQLV2 {
+func convertRawSQLToModelSQLs(sqls []string, schema string) []*model.AuditPlanSQLV2 {
 	as := make([]*model.AuditPlanSQLV2, len(sqls))
 	for i, sql := range sqls {
 		as[i] = &model.AuditPlanSQLV2{
 			Fingerprint: sql,
 			SQLContent:  sql,
+			Schema:      schema,
 		}
 	}
 	return as
@@ -367,6 +366,26 @@ func baseTaskGetSQLs(args map[string]interface{}, persist *model.Storage) ([]Hea
 	return head, rows, count, nil
 }
 
+func getTaskWithInstanceByAuditPlan(ap *model.AuditPlan, persist *model.Storage) (*model.Task, error) {
+	var task *model.Task
+	if ap.InstanceName == "" {
+		task = &model.Task{
+			DBType: ap.DBType,
+		}
+	} else {
+		instance, _, err := dms.GetInstanceInProjectByName(context.TODO(), string(ap.ProjectId), ap.InstanceName)
+		if err != nil {
+			return nil, err
+		}
+		task = &model.Task{
+			Instance: instance,
+			Schema:   ap.InstanceDatabase,
+			DBType:   ap.DBType,
+		}
+	}
+	return task, nil
+}
+
 type SchemaMetaTask struct {
 	*sqlCollector
 }
@@ -389,7 +408,10 @@ func (at *SchemaMetaTask) collectorDo() {
 		at.logger.Warnf("instance schema is not configured")
 		return
 	}
-	instance, _, err := at.persist.GetInstanceByNameAndProjectID(at.ap.InstanceName, at.ap.ProjectId)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+	instance, _, err := dms.GetInstanceInProjectByName(ctx, string(at.ap.ProjectId), at.ap.InstanceName)
 	if err != nil {
 		return
 	}
@@ -439,16 +461,17 @@ func (at *SchemaMetaTask) collectorDo() {
 		sqls = append(sqls, sql)
 	}
 	if len(sqls) > 0 {
-		err = at.persist.OverrideAuditPlanSQLs(at.ap.ID, convertRawSQLToModelSQLs(sqls))
+		err = at.persist.OverrideAuditPlanSQLs(at.ap.ID, convertRawSQLToModelSQLs(sqls, at.ap.InstanceDatabase))
 		if err != nil {
 			at.logger.Errorf("save schema meta to storage fail, error: %v", err)
 		}
 	}
 }
 
-func (at *SchemaMetaTask) Audit() (*model.AuditPlanReportV2, error) {
-	task := &model.Task{
-		DBType: at.ap.DBType,
+func (at *SchemaMetaTask) Audit() (*AuditResultResp, error) {
+	task, err := getTaskWithInstanceByAuditPlan(at.ap, at.persist)
+	if err != nil {
+		return nil, err
 	}
 	return at.baseTask.audit(task)
 }
@@ -507,7 +530,10 @@ func (at *OracleTopSQLTask) collectorDo() {
 		return
 	}
 
-	inst, _, err := at.persist.GetInstanceByNameAndProjectID(at.ap.InstanceName, at.ap.ProjectId)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+	inst, _, err := dms.GetInstanceInProjectByName(ctx, string(at.ap.ProjectId), at.ap.InstanceName)
+
 	if err != nil {
 		at.logger.Warnf("get instance fail, error: %v", err)
 		return
@@ -531,7 +557,7 @@ func (at *OracleTopSQLTask) collectorDo() {
 	}
 	defer db.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 
 	sqls, err := db.QueryTopSQLs(ctx, at.ap.Params.GetParam("top_n").Int(), at.ap.Params.GetParam("order_by_column").String())
@@ -563,7 +589,7 @@ func (at *OracleTopSQLTask) collectorDo() {
 	}
 }
 
-func (at *OracleTopSQLTask) Audit() (*model.AuditPlanReportV2, error) {
+func (at *OracleTopSQLTask) Audit() (*AuditResultResp, error) {
 	task := &model.Task{
 		DBType: at.ap.DBType,
 	}
@@ -633,14 +659,17 @@ func NewTiDBAuditLogTask(entry *logrus.Entry, ap *model.AuditPlan) Task {
 	return &TiDBAuditLogTask{NewDefaultTask(entry, ap).(*DefaultTask)}
 }
 
-func (at *TiDBAuditLogTask) Audit() (*model.AuditPlanReportV2, error) {
+func (at *TiDBAuditLogTask) Audit() (*AuditResultResp, error) {
 	var task *model.Task
 	if at.ap.InstanceName == "" {
 		task = &model.Task{
 			DBType: at.ap.DBType,
 		}
 	} else {
-		instance, _, err := at.persist.GetInstanceByNameAndProjectID(at.ap.InstanceName, at.ap.ProjectId)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+		defer cancel()
+
+		instance, _, err := dms.GetInstanceInProjectByName(ctx, string(at.ap.ProjectId), at.ap.InstanceName)
 		if err != nil {
 			return nil, err
 		}
@@ -695,24 +724,11 @@ func (at *TiDBAuditLogTask) Audit() (*model.AuditPlanReportV2, error) {
 		return nil, err
 	}
 
-	auditPlanReport := &model.AuditPlanReportV2{
-		AuditPlanID: at.ap.ID,
-		PassRate:    task.PassRate,
-		Score:       task.Score,
-		AuditLevel:  task.AuditLevel,
-	}
-	for i, executeSQL := range task.ExecuteSQLs {
-		auditPlanReport.AuditPlanReportSQLs = append(auditPlanReport.AuditPlanReportSQLs, &model.AuditPlanReportSQLV2{
-			SQL:          executeSQL.Content,
-			Number:       uint(i + 1),
-			AuditResults: executeSQL.AuditResults,
-		})
-	}
-	err = at.persist.Save(auditPlanReport)
-	if err != nil {
-		return nil, err
-	}
-	return auditPlanReport, nil
+	return &AuditResultResp{
+		AuditPlanID:  uint64(at.ap.ID),
+		Task:         task,
+		FilteredSqls: filteredSqls,
+	}, nil
 }
 
 // 审核前填充上缺失的schema, 审核后还原被审核SQL, 并添加注释说明sql在哪个库执行的
@@ -932,7 +948,7 @@ func mergeSQLsByFingerprint(sqls []SqlFromAliCloud) []sqlInfo {
 	return sqlInfos
 }
 
-func (at *aliRdsMySQLTask) Audit() (*model.AuditPlanReportV2, error) {
+func (at *aliRdsMySQLTask) Audit() (*AuditResultResp, error) {
 	task := &model.Task{
 		DBType: at.ap.DBType,
 	}
@@ -1141,7 +1157,7 @@ WHERE ID != connection_id() AND info != '' AND db NOT IN ('information_schema','
 	return sql
 }
 
-func (at *MySQLProcesslistTask) Audit() (*model.AuditPlanReportV2, error) {
+func (at *MySQLProcesslistTask) Audit() (*AuditResultResp, error) {
 	return auditWithSchema(at.logger, at.persist, at.ap)
 }
 
@@ -1150,7 +1166,7 @@ func (at *MySQLProcesslistTask) Audit() (*model.AuditPlanReportV2, error) {
 // And need to manually execute server.ReplenishTaskStatistics() to recalculate
 // real task object score
 func auditWithSchema(l *logrus.Entry, persist *model.Storage, ap *model.AuditPlan) (
-	*model.AuditPlanReportV2, error) {
+	*AuditResultResp, error) {
 
 	auditPlanSQLs, err := persist.GetAuditPlanSQLs(ap.ID)
 	if err != nil {
@@ -1170,8 +1186,8 @@ func auditWithSchema(l *logrus.Entry, persist *model.Storage, ap *model.AuditPla
 		return nil, errNoSQLNeedToBeAudited
 	}
 
-	task := &model.Task{Instance: ap.Instance, DBType: ap.DBType}
-	vTask := &model.Task{Instance: ap.Instance, DBType: ap.DBType}
+	task := &model.Task{Instance: ap.Instance, DBType: ap.DBType, Schema: ap.InstanceDatabase}
+	vTask := &model.Task{Instance: ap.Instance, DBType: ap.DBType, Schema: ap.InstanceDatabase}
 
 	for i, sql := range filteredSqls {
 		sqlItem := &model.ExecuteSQL{
@@ -1183,16 +1199,16 @@ func auditWithSchema(l *logrus.Entry, persist *model.Storage, ap *model.AuditPla
 		}
 		{
 			info := struct {
-				Schema string `json:"schema"`
+				AuditSchema string `json:"AuditSchema"`
 			}{}
 			err := json.Unmarshal(sql.Info, &info)
 			if err != nil {
 				return nil, fmt.Errorf("parse schema failed: %v", err)
 			}
-			if info.Schema != "" {
+			if info.AuditSchema != "" {
 				vTask.ExecuteSQLs = append(vTask.ExecuteSQLs, &model.ExecuteSQL{
 					BaseSQL: model.BaseSQL{
-						Content: fmt.Sprintf("USE %s;", info.Schema),
+						Content: fmt.Sprintf("USE %s;", info.AuditSchema),
 					},
 				})
 			}
@@ -1209,27 +1225,11 @@ func auditWithSchema(l *logrus.Entry, persist *model.Storage, ap *model.AuditPla
 	// replenish task statistics manually for real task
 	server.ReplenishTaskStatistics(task)
 
-	auditPlanReport := &model.AuditPlanReportV2{
-		AuditPlanID: ap.ID,
-		PassRate:    task.PassRate,
-		Score:       task.Score,
-		AuditLevel:  task.AuditLevel,
-	}
-
-	for i, executeSQL := range task.ExecuteSQLs {
-		auditPlanReport.AuditPlanReportSQLs = append(auditPlanReport.AuditPlanReportSQLs, &model.AuditPlanReportSQLV2{
-			SQL:          executeSQL.Content,
-			Number:       uint(i + 1),
-			AuditResults: executeSQL.AuditResults,
-			Schema:       executeSQL.Schema,
-		})
-	}
-
-	err = persist.Save(auditPlanReport)
-	if err != nil {
-		return nil, err
-	}
-	return auditPlanReport, nil
+	return &AuditResultResp{
+		AuditPlanID:  uint64(ap.ID),
+		Task:         task,
+		FilteredSqls: filteredSqls,
+	}, nil
 }
 
 func NewMySQLProcesslistTask(entry *logrus.Entry, ap *model.AuditPlan) Task {
@@ -1254,7 +1254,11 @@ func (at *MySQLProcesslistTask) collectorDo() {
 		at.logger.Warnf("instance is not configured")
 		return
 	}
-	instance, _, err := at.persist.GetInstanceByNameAndProjectID(at.ap.InstanceName, at.ap.ProjectId)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+
+	instance, _, err := dms.GetInstanceInProjectByName(ctx, string(at.ap.ProjectId), at.ap.InstanceName)
+
 	if err != nil {
 		return
 	}
@@ -1316,7 +1320,7 @@ type baiduRdsMySQLTask struct {
 	pullLogs    func(client *rds.Client, DBInstanceId string, startTime, endTime time.Time, pageSize, pageNum int32) (sqlList []SqlFromBaiduCloud, err error)
 }
 
-func (bt *baiduRdsMySQLTask) Audit() (*model.AuditPlanReportV2, error) {
+func (bt *baiduRdsMySQLTask) Audit() (*AuditResultResp, error) {
 	task := &model.Task{
 		DBType: bt.ap.DBType,
 	}

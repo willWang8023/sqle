@@ -3,12 +3,12 @@ package driver
 import (
 	"context"
 	sqlDriver "database/sql/driver"
+	"errors"
 	"fmt"
 	"sync"
 
 	driverV2 "github.com/actiontech/sqle/sqle/driver/v2"
 	protoV2 "github.com/actiontech/sqle/sqle/driver/v2/proto"
-	"github.com/actiontech/sqle/sqle/errors"
 	"github.com/actiontech/sqle/sqle/log"
 	"github.com/actiontech/sqle/sqle/pkg/params"
 
@@ -85,6 +85,7 @@ func (d *PluginProcessorV2) GetDriverMetas() (*driverV2.DriverMetas, error) {
 	meta := &driverV2.DriverMetas{
 		PluginName:               result.PluginName,
 		DatabaseDefaultPort:      result.DatabaseDefaultPort,
+		Logo:                     result.Logo,
 		DatabaseAdditionalParams: driverV2.ConvertProtoParamToParam(result.DatabaseAdditionalParams),
 		Rules:                    rules,
 		EnabledOptionalModule:    ms,
@@ -173,7 +174,19 @@ func (s *PluginImplV2) Close(ctx context.Context) {
 }
 
 func (s *PluginImplV2) KillProcess(ctx context.Context) error {
-	return errors.NewNotImplementedError("KillProcess not support yet")
+	api := "Kill Process"
+	s.preLog(api)
+	rs, err := s.client.KillProcess(ctx, &protoV2.KillProcessRequest{
+		Session: s.Session,
+	})
+	s.afterLog(api, err)
+	if err != nil {
+		return err
+	}
+	if rs.ErrMessage != "" {
+		return errors.New(rs.ErrMessage)
+	}
+	return nil
 }
 
 // audit
@@ -198,6 +211,7 @@ func (s *PluginImplV2) Parse(ctx context.Context, sqlText string) ([]driverV2.No
 			Type:        node.Type,
 			Text:        node.Text,
 			Fingerprint: node.Fingerprint,
+			StartLine:   node.StartLine,
 		}
 	}
 	return nodes, nil

@@ -1,15 +1,23 @@
 package v1
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"fmt"
+	"mime"
+	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	v1 "github.com/actiontech/dms/pkg/dms-common/api/dms/v1"
+	dmsCommonJwt "github.com/actiontech/dms/pkg/dms-common/api/jwt"
 	"github.com/actiontech/sqle/sqle/api/controller"
 	"github.com/actiontech/sqle/sqle/common"
+	dms "github.com/actiontech/sqle/sqle/dms"
 	"github.com/actiontech/sqle/sqle/driver"
 	driverV2 "github.com/actiontech/sqle/sqle/driver/v2"
 	"github.com/actiontech/sqle/sqle/errors"
@@ -20,7 +28,6 @@ import (
 	"github.com/actiontech/sqle/sqle/server"
 	"github.com/actiontech/sqle/sqle/server/auditplan"
 	"github.com/actiontech/sqle/sqle/utils"
-
 	"github.com/labstack/echo/v4"
 	dry "github.com/ungerik/go-dry"
 )
@@ -214,36 +221,13 @@ func CreateAuditPlan(c echo.Context) error {
 		return controller.JSONBaseErrorReq(c, errAuditPlanInstanceConflict)
 	}
 
-	// check project
-	projectName := c.Param("project_name")
-	project, exist, err := s.GetProjectByName(projectName)
+	projectUid, err := dms.GetPorjectUIDByName(c.Request().Context(), c.Param("project_name"), true)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
-	}
-	if !exist {
-		return controller.JSONBaseErrorReq(c, ErrProjectNotExist(projectName))
-	}
-	if project.IsArchived() {
-		return controller.JSONBaseErrorReq(c, ErrProjectArchived)
-	}
-
-	// check user
-	currentUserName := controller.GetUserName(c)
-
-	err = CheckIsProjectMember(currentUserName, projectName)
-	if err != nil {
-		return controller.JSONBaseErrorReq(c, err)
-	}
-
-	user, exist, err := s.GetUserByName(currentUserName)
-	if !exist {
-		return controller.JSONBaseErrorReq(c, errors.New(errors.DataNotExist, fmt.Errorf("user is not exist")))
-	} else if err != nil {
-		return controller.JSONBaseErrorReq(c, errors.New(errors.DataConflict, err))
 	}
 
 	// check audit plan name
-	_, exist, err = s.GetAuditPlanFromProjectByName(projectName, req.Name)
+	_, exist, err := s.GetAuditPlanFromProjectByName(projectUid, req.Name)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -254,7 +238,7 @@ func CreateAuditPlan(c echo.Context) error {
 	// check instance
 	var instanceType string
 	if req.InstanceName != "" {
-		inst, exist, err := s.GetInstanceByNameAndProjectName(req.InstanceName, projectName)
+		inst, exist, err := dms.GetInstanceInProjectByName(c.Request().Context(), projectUid, req.InstanceName)
 		if !exist {
 			return controller.JSONBaseErrorReq(c, ErrInstanceNotExist)
 		} else if err != nil {
@@ -277,23 +261,25 @@ func CreateAuditPlan(c echo.Context) error {
 			}
 		}
 		instanceType = inst.DbType
-
 		// check operation
-		can, err := s.CheckUserCanCreateAuditPlan(user, projectName, req.InstanceName)
+		user, err := controller.GetCurrentUser(c, dms.GetUser)
 		if err != nil {
 			return controller.JSONBaseErrorReq(c, err)
 		}
-		if !can {
+		canCreateAuditPlan, err := CheckUserCanCreateAuditPlan(c.Request().Context(), projectUid, user, []*model.Instance{inst})
+		if err != nil {
+			return controller.JSONBaseErrorReq(c, err)
+		}
+		if !canCreateAuditPlan {
 			return controller.JSONBaseErrorReq(c, errors.NewUserNotPermissionError(model.GetOperationCodeDesc(uint(model.OP_AUDIT_PLAN_SAVE))))
 		}
-
 	} else {
 		instanceType = req.InstanceType
 	}
 
 	// check rule template name
 	if req.RuleTemplateName != "" {
-		exist, err = s.IsRuleTemplateExist(req.RuleTemplateName, []uint{project.ID, model.ProjectIdForGlobalRuleTemplate})
+		exist, err = s.IsRuleTemplateExist(req.RuleTemplateName, []string{projectUid, model.ProjectIdForGlobalRuleTemplate})
 		if err != nil {
 			return controller.JSONBaseErrorReq(c, err)
 		}
@@ -301,7 +287,7 @@ func CreateAuditPlan(c echo.Context) error {
 			return controller.JSONBaseErrorReq(c, errors.New(errors.DataNotExist, fmt.Errorf("rule template does not exist")))
 		}
 	}
-	ruleTemplateName, err := autoSelectRuleTemplate(req.RuleTemplateName, req.InstanceName, req.InstanceType, project.ID)
+	ruleTemplateName, err := autoSelectRuleTemplate(c.Request().Context(), req.RuleTemplateName, req.InstanceName, req.InstanceType, projectUid)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -316,9 +302,10 @@ func CreateAuditPlan(c echo.Context) error {
 	}
 
 	// generate token
-	j := utils.NewJWT(utils.JWTSecretKey)
-	t, err := j.CreateToken(currentUserName, time.Now().Add(tokenExpire).Unix(),
-		utils.WithAuditPlanName(req.Name))
+	userId := controller.GetUserID(c)
+	// 为了控制JWT Token的长度，保证其长度不超过数据表定义的长度上限(255字符)
+	// 因此使用MD5算法将变长的 currentUserName 和 Name 转换为固定长度
+	t, err := dmsCommonJwt.GenJwtToken(dmsCommonJwt.WithUserId(userId), dmsCommonJwt.WithExpiredTime(tokenExpire), dmsCommonJwt.WithAuditPlanName(utils.Md5(req.Name)))
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, errors.New(errors.DataConflict, err))
 	}
@@ -328,13 +315,13 @@ func CreateAuditPlan(c echo.Context) error {
 		CronExpression:   req.Cron,
 		Type:             req.Type,
 		Params:           ps,
-		CreateUserID:     user.ID,
+		CreateUserID:     userId,
 		Token:            t,
 		DBType:           instanceType,
 		RuleTemplateName: ruleTemplateName,
 		InstanceName:     req.InstanceName,
 		InstanceDatabase: req.InstanceDatabase,
-		ProjectId:        project.ID,
+		ProjectId:        model.ProjectUID(projectUid),
 	}
 	err = s.Save(ap)
 	if err != nil {
@@ -346,7 +333,7 @@ func CreateAuditPlan(c echo.Context) error {
 
 // customRuleTemplateName如果为空, 将返回instanceName绑定的规则模板, 如果customRuleTemplateName,和instanceName都为空, 将返回dbType对应默认模板, dbType不能为空, 函数不做参数校验
 // 规则模板选择规则: 指定规则模板 -- > 数据源绑定的规则模板 -- > 数据库类型默认模板
-func autoSelectRuleTemplate(customRuleTemplateName string, instanceName string, dbType string, projectId uint) (ruleTemplateName string, err error) {
+func autoSelectRuleTemplate(ctx context.Context, customRuleTemplateName string, instanceName string, dbType string, projectId string) (ruleTemplateName string, err error) {
 	s := model.GetStorage()
 
 	if customRuleTemplateName != "" {
@@ -354,13 +341,14 @@ func autoSelectRuleTemplate(customRuleTemplateName string, instanceName string, 
 	}
 
 	if instanceName != "" {
-		ruleTemplate, exist, err := s.GetRuleTemplatesByInstanceNameAndProjectId(instanceName, projectId)
+		instance, exist, err := dms.GetInstanceInProjectByName(ctx, projectId, instanceName)
 		if err != nil {
 			return "", err
 		}
 		if exist {
-			return ruleTemplate.Name, nil
+			return instance.RuleTemplateName, nil
 		}
+
 	}
 
 	return s.GetDefaultRuleTemplateName(dbType), nil
@@ -378,18 +366,14 @@ func autoSelectRuleTemplate(customRuleTemplateName string, instanceName string, 
 // @router /v1/projects/{project_name}/audit_plans/{audit_plan_name}/ [delete]
 func DeleteAuditPlan(c echo.Context) error {
 	s := model.GetStorage()
-	projectName := c.Param("project_name")
-	apName := c.Param("audit_plan_name")
-
-	archived, err := s.IsProjectArchived(projectName)
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"), true)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
-	if archived {
-		return controller.JSONBaseErrorReq(c, ErrProjectArchived)
-	}
 
-	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectName, apName, 0)
+	apName := c.Param("audit_plan_name")
+
+	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectUid, apName, "")
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -426,19 +410,16 @@ func UpdateAuditPlan(c echo.Context) error {
 	if err := controller.BindAndValidateReq(c, req); err != nil {
 		return err
 	}
-	projectName := c.Param("project_name")
-	apName := c.Param("audit_plan_name")
-
-	storage := model.GetStorage()
-	archived, err := storage.IsProjectArchived(projectName)
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"), true)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
-	if archived {
-		return controller.JSONBaseErrorReq(c, ErrProjectArchived)
-	}
 
-	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectName, apName, 0)
+	apName := c.Param("audit_plan_name")
+
+	storage := model.GetStorage()
+
+	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectUid, apName, "")
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -458,7 +439,7 @@ func UpdateAuditPlan(c echo.Context) error {
 	}
 
 	if req.RuleTemplateName != nil {
-		exist, err = storage.IsRuleTemplateExist(*req.RuleTemplateName, []uint{ap.ProjectId, model.ProjectIdForGlobalRuleTemplate})
+		exist, err = storage.IsRuleTemplateExist(*req.RuleTemplateName, []string{projectUid, model.ProjectIdForGlobalRuleTemplate})
 		if err != nil {
 			return controller.JSONBaseErrorReq(c, err)
 		}
@@ -530,9 +511,7 @@ func GetAuditPlans(c echo.Context) error {
 	if err := controller.BindAndValidateReq(c, req); err != nil {
 		return err
 	}
-	projectName := c.Param("project_name")
-	userName := controller.GetUserName(c)
-	err := CheckIsProjectMember(userName, projectName)
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"))
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -542,22 +521,11 @@ func GetAuditPlans(c echo.Context) error {
 		offset = req.PageSize * (req.PageIndex - 1)
 	}
 
-	currentUser, err := controller.GetCurrentUser(c)
+	userId := controller.GetUserID(c)
+
+	up, err := dms.NewUserPermission(userId, projectUid)
 	if err != nil {
 		return err
-	}
-	instances, err := s.GetUserCanOpInstancesFromProject(currentUser, projectName, []uint{model.OP_AUDIT_PLAN_VIEW_OTHERS})
-	if err != nil {
-		return controller.JSONBaseErrorReq(c, err)
-	}
-	names := []string{}
-	for _, instance := range instances {
-		names = append(names, instance.Name)
-	}
-
-	isManager, err := s.IsProjectManager(currentUser.Name, projectName)
-	if err != nil {
-		return controller.JSONBaseErrorReq(c, err)
 	}
 
 	data := map[string]interface{}{
@@ -565,15 +533,20 @@ func GetAuditPlans(c echo.Context) error {
 		"fuzzy_search_audit_plan_name":    req.FuzzySearchAuditPlanName,
 		"filter_audit_plan_type":          req.FilterAuditPlanType,
 		"filter_audit_plan_instance_name": req.FilterAuditPlanInstanceName,
-		"current_user_name":               currentUser.Name,
-		"current_user_is_admin":           model.DefaultAdminUser == currentUser.Name || isManager,
-		"filter_project_name":             projectName,
+		"filter_project_id":               projectUid,
 		"limit":                           req.PageSize,
+		"current_user_id":                 userId,
+		"current_user_is_admin":           up.IsAdmin(),
 		"offset":                          offset,
 	}
-	if len(names) > 0 {
-		data["accessible_instances_name"] = fmt.Sprintf("'%s'", strings.Join(names, "', '"))
+	if !up.IsAdmin() {
+		instanceNames, err := dms.GetInstanceNamesInProjectByIds(c.Request().Context(), projectUid, up.GetInstancesByOP(v1.OpPermissionTypeViewOtherAuditPlan))
+		if err != nil {
+			return err
+		}
+		data["accessible_instances_name"] = fmt.Sprintf("\"%s\"", strings.Join(instanceNames, "\",\""))
 	}
+
 	auditPlans, count, err := s.GetAuditPlansByReq(data)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
@@ -619,10 +592,13 @@ type GetAuditPlanResV1 struct {
 // @Success 200 {object} v1.GetAuditPlanResV1
 // @router /v1/projects/{project_name}/audit_plans/{audit_plan_name}/ [get]
 func GetAuditPlan(c echo.Context) error {
-	projectName := c.Param("project_name")
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"))
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
 	apName := c.Param("audit_plan_name")
 
-	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectName, apName, model.OP_AUDIT_PLAN_VIEW_OTHERS)
+	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectUid, apName, v1.OpPermissionTypeViewOtherAuditPlan)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -689,10 +665,13 @@ func GetAuditPlanReports(c echo.Context) error {
 		return err
 	}
 
-	projectName := c.Param("project_name")
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"))
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
 	apName := c.Param("audit_plan_name")
 
-	_, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectName, apName, model.OP_AUDIT_PLAN_VIEW_OTHERS)
+	_, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectUid, apName, v1.OpPermissionTypeViewOtherAuditPlan)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -706,7 +685,7 @@ func GetAuditPlanReports(c echo.Context) error {
 	}
 
 	data := map[string]interface{}{
-		"project_name":    projectName,
+		"project_id":      projectUid,
 		"audit_plan_name": apName,
 		"limit":           req.PageSize,
 		"offset":          offset,
@@ -749,10 +728,13 @@ type GetAuditPlanReportResV1 struct {
 // @Success 200 {object} v1.GetAuditPlanReportResV1
 // @router /v1/projects/{project_name}/audit_plans/{audit_plan_name}/reports/{audit_plan_report_id}/ [get]
 func GetAuditPlanReport(c echo.Context) error {
-	projectName := c.Param("project_name")
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"))
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
 	apName := c.Param("audit_plan_name")
 
-	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectName, apName, model.OP_AUDIT_PLAN_VIEW_OTHERS)
+	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectUid, apName, v1.OpPermissionTypeViewOtherAuditPlan)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -786,18 +768,112 @@ func GetAuditPlanReport(c echo.Context) error {
 	})
 }
 
+func filterSQLsByBlackList(sqls []*AuditPlanSQLReqV1, blackList []*model.BlackListAuditPlanSQL) []*AuditPlanSQLReqV1 {
+	if len(blackList) == 0 {
+		return sqls
+	}
+	filteredSQLs := []*AuditPlanSQLReqV1{}
+	filter := ConvertToBlackFilter(blackList)
+	for _, sql := range sqls {
+		if filter.HasEndpointInBlackList([]string{sql.Endpoint}) || filter.IsSqlInBlackList(sql.LastReceiveText) {
+			continue
+		}
+		filteredSQLs = append(filteredSQLs, sql)
+	}
+	return filteredSQLs
+}
+
+func ConvertToBlackFilter(blackList []*model.BlackListAuditPlanSQL) *BlackFilter {
+	var blackFilter BlackFilter
+	for _, filter := range blackList {
+		switch filter.FilterType {
+		case model.FilterTypeSQL:
+			blackFilter.BlackSqlList = append(blackFilter.BlackSqlList, utils.FullFuzzySearchRegexp(filter.FilterContent))
+		case model.FilterTypeHost:
+			blackFilter.BlackHostList = append(blackFilter.BlackHostList, utils.FullFuzzySearchRegexp(filter.FilterContent))
+		case model.FilterTypeIP:
+			ip := net.ParseIP(filter.FilterContent)
+			if ip == nil {
+				log.Logger().Errorf("wrong ip in black list,ip:%s", filter.FilterContent)
+				continue
+			}
+			blackFilter.BlackIpList = append(blackFilter.BlackIpList, ip)
+		case model.FilterTypeCIDR:
+			_, cidr, err := net.ParseCIDR(filter.FilterContent)
+			if err != nil {
+				log.Logger().Errorf("wrong cidr in black list,cidr:%s,err:%v", filter.FilterContent, err)
+				continue
+			}
+			blackFilter.BlackCidrList = append(blackFilter.BlackCidrList, cidr)
+		}
+	}
+	return &blackFilter
+}
+
+// 构造BlackFilter的目的是缓存黑名单中需要使用的结构体，在每个循环中复用
+type BlackFilter struct {
+	BlackSqlList  []*regexp.Regexp //更换正则匹配提高效率
+	BlackIpList   []net.IP
+	BlackHostList []*regexp.Regexp
+	BlackCidrList []*net.IPNet
+}
+
+func (f BlackFilter) IsSqlInBlackList(checkSql string) bool {
+	for _, blackSql := range f.BlackSqlList {
+		if blackSql.MatchString(checkSql) {
+			return true
+		}
+	}
+	return false
+}
+
+// 输入一组ip若其中有一个ip在黑名单中则返回true
+func (f BlackFilter) HasEndpointInBlackList(checkIps []string) bool {
+	var checkNetIp net.IP
+	for _, checkIp := range checkIps {
+		checkNetIp = net.ParseIP(checkIp)
+		if checkNetIp == nil {
+			// 无法解析IP，可能是域名，需要正则匹配
+			for _, blackHost := range f.BlackHostList {
+				if blackHost.MatchString(checkIp) {
+					return true
+				}
+			}
+		} else {
+			for _, blackIp := range f.BlackIpList {
+				if blackIp.Equal(checkNetIp) {
+					return true
+				}
+			}
+			for _, blackCidr := range f.BlackCidrList {
+				if blackCidr.Contains(checkNetIp) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 type FullSyncAuditPlanSQLsReqV1 struct {
 	SQLs []*AuditPlanSQLReqV1 `json:"audit_plan_sql_list" form:"audit_plan_sql_list" valid:"dive"`
 }
 
 type AuditPlanSQLReqV1 struct {
-	Fingerprint          string `json:"audit_plan_sql_fingerprint" form:"audit_plan_sql_fingerprint" example:"select * from t1 where id = ?"`
-	Counter              string `json:"audit_plan_sql_counter" form:"audit_plan_sql_counter" example:"6" valid:"required"`
-	LastReceiveText      string `json:"audit_plan_sql_last_receive_text" form:"audit_plan_sql_last_receive_text" example:"select * from t1 where id = 1"`
-	LastReceiveTimestamp string `json:"audit_plan_sql_last_receive_timestamp" form:"audit_plan_sql_last_receive_timestamp" example:"RFC3339"`
-	Schema               string `json:"audit_plan_sql_schema" from:"audit_plan_sql_schema" example:"db1"`
+	Fingerprint          string    `json:"audit_plan_sql_fingerprint" form:"audit_plan_sql_fingerprint" example:"select * from t1 where id = ?"`
+	Counter              string    `json:"audit_plan_sql_counter" form:"audit_plan_sql_counter" example:"6" valid:"required"`
+	LastReceiveText      string    `json:"audit_plan_sql_last_receive_text" form:"audit_plan_sql_last_receive_text" example:"select * from t1 where id = 1"`
+	LastReceiveTimestamp string    `json:"audit_plan_sql_last_receive_timestamp" form:"audit_plan_sql_last_receive_timestamp" example:"RFC3339"`
+	Schema               string    `json:"audit_plan_sql_schema" from:"audit_plan_sql_schema" example:"db1"`
+	QueryTimeAvg         *float64  `json:"query_time_avg" from:"query_time_avg" example:"3.22"`
+	QueryTimeMax         *float64  `json:"query_time_max" from:"query_time_max" example:"5.22"`
+	FirstQueryAt         time.Time `json:"first_query_at" from:"first_query_at" example:"2023-09-12T02:48:01.317880Z"`
+	DBUser               string    `json:"db_user" from:"db_user" example:"database_user001"`
+	Endpoint             string    `json:"endpoint" from:"endpoint" example:"10.186.1.2"`
 }
 
+// todo: 后续该接口会废弃
+// @Deprecated
 // @Summary 全量同步SQL到扫描任务
 // @Description full sync audit plan SQLs
 // @Id fullSyncAuditPlanSQLsV1
@@ -813,19 +889,16 @@ func FullSyncAuditPlanSQLs(c echo.Context) error {
 	if err := controller.BindAndValidateReq(c, req); err != nil {
 		return err
 	}
-	projectName := c.Param("project_name")
 	apName := c.Param("audit_plan_name")
 
 	s := model.GetStorage()
-	archived, err := s.IsProjectArchived(projectName)
+
+	projectUid, err := dms.GetPorjectUIDByName(c.Request().Context(), c.Param("project_name"), true)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
-	if archived {
-		return controller.JSONBaseErrorReq(c, ErrProjectArchived)
-	}
 
-	ap, exist, err := s.GetAuditPlanFromProjectByName(projectName, apName)
+	ap, exist, err := s.GetAuditPlanFromProjectByName(projectUid, apName)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -833,18 +906,31 @@ func FullSyncAuditPlanSQLs(c echo.Context) error {
 		return controller.JSONBaseErrorReq(c, errAuditPlanNotExist)
 	}
 
-	sqls, err := convertToModelAuditPlanSQL(c, ap, req.SQLs)
+	l := log.NewEntry()
+	reqSQLs := req.SQLs
+	blackList, err := s.GetBlackListAuditPlanSQLs()
+	if err == nil {
+		reqSQLs = filterSQLsByBlackList(reqSQLs, blackList)
+	} else {
+		l.Warnf("blacklist is not used, err:%v", err)
+	}
+	if len(reqSQLs) == 0 {
+		return controller.JSONBaseErrorReq(c, nil)
+	}
+	sqls, err := convertToModelAuditPlanSQL(c, ap, reqSQLs)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
 
-	return controller.JSONBaseErrorReq(c, auditplan.UploadSQLs(log.NewEntry(), ap, sqls, false))
+	return controller.JSONBaseErrorReq(c, auditplan.UploadSQLs(l, ap, sqls, false))
 }
 
 type PartialSyncAuditPlanSQLsReqV1 struct {
 	SQLs []*AuditPlanSQLReqV1 `json:"audit_plan_sql_list" form:"audit_plan_sql_list" valid:"dive"`
 }
 
+// todo: 后续该接口会废弃
+// @Deprecated
 // @Summary 增量同步SQL到扫描任务
 // @Description partial sync audit plan SQLs
 // @Id partialSyncAuditPlanSQLsV1
@@ -860,19 +946,15 @@ func PartialSyncAuditPlanSQLs(c echo.Context) error {
 	if err := controller.BindAndValidateReq(c, req); err != nil {
 		return err
 	}
-	projectName := c.Param("project_name")
 	apName := c.Param("audit_plan_name")
 
 	s := model.GetStorage()
-	archived, err := s.IsProjectArchived(projectName)
+	projectUid, err := dms.GetPorjectUIDByName(c.Request().Context(), c.Param("project_name"), true)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
-	if archived {
-		return controller.JSONBaseErrorReq(c, ErrProjectArchived)
-	}
 
-	ap, exist, err := s.GetAuditPlanFromProjectByName(projectName, apName)
+	ap, exist, err := dms.GetAuditPlanWithInstanceFromProjectByName(projectUid, apName, s.GetAuditPlanFromProjectByName)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -880,11 +962,22 @@ func PartialSyncAuditPlanSQLs(c echo.Context) error {
 		return controller.JSONBaseErrorReq(c, errAuditPlanNotExist)
 	}
 
-	sqls, err := convertToModelAuditPlanSQL(c, ap, req.SQLs)
+	l := log.NewEntry()
+	reqSQLs := req.SQLs
+	blackList, err := s.GetBlackListAuditPlanSQLs()
+	if err == nil {
+		reqSQLs = filterSQLsByBlackList(reqSQLs, blackList)
+	} else {
+		l.Warnf("blacklist is not used, err:%v", err)
+	}
+	if len(reqSQLs) == 0 {
+		return controller.JSONBaseErrorReq(c, nil)
+	}
+	sqls, err := convertToModelAuditPlanSQL(c, ap, reqSQLs)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
-	return controller.JSONBaseErrorReq(c, auditplan.UploadSQLs(log.NewEntry(), ap, sqls, true))
+	return controller.JSONBaseErrorReq(c, auditplan.UploadSQLs(l, ap, sqls, true))
 }
 
 func convertToModelAuditPlanSQL(c echo.Context, auditPlan *model.AuditPlan, reqSQLs []*AuditPlanSQLReqV1) ([]*auditplan.SQL, error) {
@@ -907,8 +1000,11 @@ func convertToModelAuditPlanSQL(c echo.Context, auditPlan *model.AuditPlan, reqS
 		}
 	}()
 
-	sqls := make([]*auditplan.SQL, len(reqSQLs))
-	for i, reqSQL := range reqSQLs {
+	sqls := make([]*auditplan.SQL, 0, len(reqSQLs))
+	for _, reqSQL := range reqSQLs {
+		if reqSQL.LastReceiveText == "" {
+			continue
+		}
 		fp := reqSQL.Fingerprint
 		// the caller may be written in a different language, such as (Java, Bash, Python), so the fingerprint is
 		// generated in different ways. In order to maintain th same fingerprint generation logic, we provide a way to
@@ -937,11 +1033,27 @@ func convertToModelAuditPlanSQL(c echo.Context, auditPlan *model.AuditPlan, reqS
 			"last_receive_timestamp": reqSQL.LastReceiveTimestamp,
 			server.AuditSchema:       reqSQL.Schema,
 		}
-		sqls[i] = &auditplan.SQL{
+		// 兼容老版本的Scannerd
+		// 老版本Scannerd不传输这两个字段，不记录到数据库中
+		// 并且这里避免记录0值到数据库中，导致后续计算出的平均时间出错
+		if reqSQL.QueryTimeAvg != nil {
+			info["query_time_avg"] = utils.Round(*reqSQL.QueryTimeAvg, 4)
+		}
+		if reqSQL.QueryTimeMax != nil {
+			info["query_time_max"] = utils.Round(*reqSQL.QueryTimeMax, 4)
+		}
+		if !reqSQL.FirstQueryAt.IsZero() {
+			info["first_query_at"] = reqSQL.FirstQueryAt
+		}
+		if reqSQL.DBUser != "" {
+			info["db_user"] = reqSQL.DBUser
+		}
+		sqls = append(sqls, &auditplan.SQL{
 			Fingerprint: fp,
 			SQLContent:  reqSQL.LastReceiveText,
 			Info:        info,
-		}
+			Schema:      reqSQL.Schema,
+		})
 	}
 	return sqls, nil
 }
@@ -961,19 +1073,13 @@ type TriggerAuditPlanResV1 struct {
 // @Success 200 {object} v1.TriggerAuditPlanResV1
 // @router /v1/projects/{project_name}/audit_plans/{audit_plan_name}/trigger [post]
 func TriggerAuditPlan(c echo.Context) error {
-	projectName := c.Param("project_name")
-	apName := c.Param("audit_plan_name")
-
-	s := model.GetStorage()
-	archived, err := s.IsProjectArchived(projectName)
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"), true)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
-	if archived {
-		return controller.JSONBaseErrorReq(c, ErrProjectArchived)
-	}
+	apName := c.Param("audit_plan_name")
 
-	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectName, apName, 0)
+	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectUid, apName, "")
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -995,44 +1101,6 @@ func TriggerAuditPlan(c echo.Context) error {
 			Timestamp:  report.CreatedAt.Format(time.RFC3339),
 		},
 	})
-}
-
-// deprecated. will be removed when sqle-ee is not referenced.
-func CheckCurrentUserCanAccessAuditPlan(c echo.Context, apName string, opCode int) error {
-	storage := model.GetStorage()
-
-	ap, exist, err := storage.GetAuditPlanByName(apName)
-	if err != nil {
-		return err
-	}
-	if !exist {
-		return errAuditPlanNotExist
-	}
-
-	if controller.GetUserName(c) == model.DefaultAdminUser {
-		return nil
-	}
-
-	user, err := controller.GetCurrentUser(c)
-	if err != nil {
-		return err
-	}
-
-	if ap.CreateUserID == user.ID {
-		return nil
-	}
-	if opCode > 0 {
-		instances, err := storage.GetUserCanOpInstances(user, []uint{uint(opCode)})
-		if err != nil {
-			return controller.JSONBaseErrorReq(c, errors.NewUserNotPermissionError(model.GetOperationCodeDesc(uint(opCode))))
-		}
-		for _, instance := range instances {
-			if ap.InstanceName == instance.Name {
-				return nil
-			}
-		}
-	}
-	return nil
 }
 
 type UpdateAuditPlanNotifyConfigReqV1 struct {
@@ -1060,19 +1128,15 @@ func UpdateAuditPlanNotifyConfig(c echo.Context) error {
 		return err
 	}
 
-	projectName := c.Param("project_name")
-	apName := c.Param("audit_plan_name")
-
-	storage := model.GetStorage()
-	archived, err := storage.IsProjectArchived(projectName)
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"), true)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
-	if archived {
-		return controller.JSONBaseErrorReq(c, ErrProjectArchived)
-	}
+	apName := c.Param("audit_plan_name")
 
-	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectName, apName, 0)
+	storage := model.GetStorage()
+
+	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectUid, apName, "")
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -1128,10 +1192,13 @@ type GetAuditPlanNotifyConfigResDataV1 struct {
 // @Success 200 {object} v1.GetAuditPlanNotifyConfigResV1
 // @router /v1/projects/{project_name}/audit_plans/{audit_plan_name}/notify_config [get]
 func GetAuditPlanNotifyConfig(c echo.Context) error {
-	projectName := c.Param("project_name")
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"))
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
 	apName := c.Param("audit_plan_name")
 
-	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectName, apName, model.OP_AUDIT_PLAN_VIEW_OTHERS)
+	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectUid, apName, v1.OpPermissionTypeViewOtherAuditPlan)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -1172,10 +1239,13 @@ type TestAuditPlanNotifyConfigResDataV1 struct {
 // @Success 200 {object} v1.TestAuditPlanNotifyConfigResV1
 // @router /v1/projects/{project_name}/audit_plans/{audit_plan_name}/notify_config/test [get]
 func TestAuditPlanNotifyConfig(c echo.Context) error {
-	projectName := c.Param("project_name")
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"))
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
 	apName := c.Param("audit_plan_name")
 
-	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectName, apName, 0)
+	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectUid, apName, "")
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -1183,12 +1253,11 @@ func TestAuditPlanNotifyConfig(c echo.Context) error {
 		return controller.JSONBaseErrorReq(c, errAuditPlanNotExist)
 	}
 
-	s := model.GetStorage()
-	user, exist, err := s.GetUserByID(ap.CreateUserID)
+	// s := model.GetStorage()
+	_, err = controller.GetCurrentUser(c, dms.GetUser)
 	if err != nil {
-		return controller.JSONBaseErrorReq(c, err)
-	}
-	if !exist {
+		// return controller.JSONBaseErrorReq(c, err)
+		// dms-todo: 需要判断用户是否存在，dms提供
 		return c.JSON(http.StatusOK, TestAuditPlanNotifyConfigResV1{
 			BaseRes: controller.NewBaseReq(nil),
 			Data: TestAuditPlanNotifyConfigResDataV1{
@@ -1197,8 +1266,14 @@ func TestAuditPlanNotifyConfig(c echo.Context) error {
 			},
 		})
 	}
-	ap.CreateUser = user
 
+	// user, exist, err := s.GetUserByID(ap.CreateUserID)
+	// if err != nil {
+	// 	return controller.JSONBaseErrorReq(c, err)
+	// }
+
+	// dms-todo: notification
+	// ap.CreateUser = user
 	err = notification.GetAuditPlanNotifier().Send(&notification.TestNotify{}, ap)
 	if err != nil {
 		return c.JSON(http.StatusOK, TestAuditPlanNotifyConfigResV1{
@@ -1292,10 +1367,13 @@ func GetAuditPlanSQLs(c echo.Context) error {
 		return err
 	}
 
-	projectName := c.Param("project_name")
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"))
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
 	apName := c.Param("audit_plan_name")
 
-	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectName, apName, model.OP_AUDIT_PLAN_VIEW_OTHERS)
+	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectUid, apName, v1.OpPermissionTypeViewOtherAuditPlan)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -1373,10 +1451,13 @@ func GetAuditPlanReportSQLsV1(c echo.Context) error {
 	if err := controller.BindAndValidateReq(c, req); err != nil {
 		return err
 	}
-	projectName := c.Param("project_name")
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"))
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
 	apName := c.Param("audit_plan_name")
 
-	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectName, apName, model.OP_AUDIT_PLAN_VIEW_OTHERS)
+	ap, exist, err := GetAuditPlanIfCurrentUserCanAccess(c, projectUid, apName, v1.OpPermissionTypeViewOtherAuditPlan)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -1413,4 +1494,94 @@ func GetAuditPlanReportSQLsV1(c echo.Context) error {
 		Data:      auditPlanReportSQLsResV1,
 		TotalNums: count,
 	})
+}
+
+func spliceAuditResults(auditResults []model.AuditResult) string {
+	results := []string{}
+	for _, auditResult := range auditResults {
+		results = append(results, fmt.Sprintf("[%v]%v", auditResult.Level, auditResult.Message))
+	}
+	return strings.Join(results, "\n")
+}
+
+// GetAuditPlanAnalysisData get SQL explain and related table metadata for analysis
+// @Summary 以csv的形式导出扫描报告
+// @Description export audit plan report as csv
+// @Id exportAuditPlanReportV1
+// @Tags audit_plan
+// @Param project_name path string true "project name"
+// @Param audit_plan_name path string true "audit plan name"
+// @Param audit_plan_report_id path string true "audit plan report id"
+// @Security ApiKeyAuth
+// @Success 200 {file} file "get export audit plan report"
+// @router /v1/projects/{project_name}/audit_plans/{audit_plan_name}/reports/{audit_plan_report_id}/export [get]
+func ExportAuditPlanReportV1(c echo.Context) error {
+	s := model.GetStorage()
+	buff := new(bytes.Buffer)
+	reportIdStr := c.Param("audit_plan_report_id")
+	auditPlanName := c.Param("audit_plan_name")
+	projectName := c.Param("project_name")
+
+	reportId, err := strconv.Atoi(reportIdStr)
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
+	csvWriter := csv.NewWriter(buff)
+	buff.WriteString("\xEF\xBB\xBF") // 写入UTF-8 BOM
+	reportInfo, exist, err := s.GetReportWithAuditPlanByReportID(reportId)
+	if !exist {
+		return controller.JSONBaseErrorReq(c, fmt.Errorf("not found audit report"))
+	}
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
+	if reportInfo.AuditPlan == nil {
+		return controller.JSONBaseErrorReq(c, fmt.Errorf("the audit plan corresponding to the report was not found"))
+	}
+
+	baseInfo := [][]string{
+		{"扫描任务名称", auditPlanName},
+		{"报告生成时间", reportInfo.CreatedAt.Format("2006/01/02 15:04")},
+		{"审核结果评分", strconv.FormatInt(int64(reportInfo.Score), 10)},
+		{"审核通过率", fmt.Sprintf("%v%%", reportInfo.PassRate*100)},
+		{"所属项目", projectName},
+		{"扫描任务创建人", dms.GetUserNameWithDelTag(reportInfo.AuditPlan.CreateUserID)},
+		{"扫描任务类型", reportInfo.AuditPlan.Type},
+		{"数据库类型", reportInfo.AuditPlan.DBType},
+		{"审核的数据库", reportInfo.AuditPlan.InstanceDatabase},
+	}
+	err = csvWriter.WriteAll(baseInfo)
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
+
+	// Add a split line between report information and sql audit information
+	err = csvWriter.Write([]string{})
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
+
+	err = csvWriter.Write([]string{"编号", "SQL", "审核结果"})
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
+
+	sqlInfo := [][]string{}
+	for idx, sql := range reportInfo.AuditPlanReportSQLs {
+		sqlInfo = append(sqlInfo, []string{strconv.Itoa(idx + 1), sql.SQL, spliceAuditResults(sql.AuditResults)})
+	}
+
+	err = csvWriter.WriteAll(sqlInfo)
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
+
+	csvWriter.Flush()
+
+	fileName := fmt.Sprintf("扫描任务报告_%s_%s.csv", auditPlanName, time.Now().Format("20060102150405"))
+	c.Response().Header().Set(echo.HeaderContentDisposition, mime.FormatMediaType("attachment", map[string]string{
+		"filename": fileName,
+	}))
+
+	return c.Blob(http.StatusOK, "text/csv", buff.Bytes())
 }

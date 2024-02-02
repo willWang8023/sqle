@@ -17,16 +17,18 @@ const (
 const (
 	SQLTypeDML = "dml"
 	SQLTypeDDL = "ddl"
+	SQLTypeDQL = "dql"
 )
 
 const (
-	DriverTypeMySQL      = "MySQL"
-	DriverTypePostgreSQL = "PostgreSQL"
-	DriverTypeTiDB       = "TiDB"
-	DriverTypeSQLServer  = "SQL Server"
-	DriverTypeOracle     = "Oracle"
-	DriverTypeDB2        = "DB2"
-	DriverTypeOceanBase  = "OceanBase For MySQL"
+	DriverTypeMySQL          = "MySQL"
+	DriverTypePostgreSQL     = "PostgreSQL"
+	DriverTypeTiDB           = "TiDB"
+	DriverTypeSQLServer      = "SQL Server"
+	DriverTypeOracle         = "Oracle"
+	DriverTypeDB2            = "DB2"
+	DriverTypeOceanBase      = "OceanBase For MySQL"
+	DriverTypeTDSQLForInnoDB = "TDSQL For InnoDB"
 )
 
 type DriverNotSupportedError struct {
@@ -46,6 +48,7 @@ const (
 	OptionalModuleGetTableMeta
 	OptionalModuleExtractTableFromSQL
 	OptionalModuleEstimateSQLAffectRows
+	OptionalModuleKillProcess
 )
 
 func (m OptionalModule) String() string {
@@ -62,6 +65,8 @@ func (m OptionalModule) String() string {
 		return "ExtractTableFromSQL"
 	case OptionalModuleEstimateSQLAffectRows:
 		return "EstimateSQLAffectRows"
+	case OptionalModuleKillProcess:
+		return "KillProcess"
 	default:
 		return "Unknown"
 	}
@@ -70,6 +75,7 @@ func (m OptionalModule) String() string {
 type DriverMetas struct {
 	PluginName               string
 	DatabaseDefaultPort      int64
+	Logo                     []byte
 	DatabaseAdditionalParams params.Params
 	Rules                    []*Rule
 	EnabledOptionalModule    []OptionalModule
@@ -92,6 +98,7 @@ func ConvertRuleFromProtoToDriver(rule *protoV2.Rule) *Rule {
 		Annotation: rule.Annotation,
 		Level:      RuleLevel(rule.Level),
 		Params:     ps,
+		Knowledge:  RuleKnowledge{Content: rule.Knowledge.GetContent()},
 	}
 }
 
@@ -112,6 +119,9 @@ func ConvertRuleFromDriverToProto(rule *Rule) *protoV2.Rule {
 		Level:      string(rule.Level),
 		Category:   rule.Category,
 		Params:     params,
+		Knowledge: &protoV2.Knowledge{
+			Content: rule.Knowledge.Content,
+		},
 	}
 }
 

@@ -10,9 +10,11 @@ import (
 	"strconv"
 	"time"
 
+	dmsV1 "github.com/actiontech/dms/pkg/dms-common/api/dms/v1"
 	mybatis_parser "github.com/actiontech/mybatis-mapper-2-sql"
 	"github.com/actiontech/sqle/sqle/api/controller"
 	"github.com/actiontech/sqle/sqle/common"
+	"github.com/actiontech/sqle/sqle/dms"
 	"github.com/actiontech/sqle/sqle/errors"
 	"github.com/actiontech/sqle/sqle/log"
 	"github.com/actiontech/sqle/sqle/model"
@@ -68,31 +70,77 @@ func convertTaskToRes(task *model.Task) *AuditTaskResV1 {
 const (
 	InputSQLFileName        = "input_sql_file"
 	InputMyBatisXMLFileName = "input_mybatis_xml_file"
+	InputZipFileName        = "input_zip_file"
+	GitHttpURL              = "git_http_url"
+	GitUserName             = "git_user_name"
+	GitPassword             = "git_user_password"
 )
 
-func getSQLFromFile(c echo.Context) (string, string, error) {
+func getSQLFromFile(c echo.Context) (getSQLFromFileResp, error) {
 	// Read it from sql file.
-	sql, exist, err := controller.ReadFileContent(c, InputSQLFileName)
+	fileName, sqlsFromSQLFile, exist, err := controller.ReadFile(c, InputSQLFileName)
 	if err != nil {
-		return "", model.TaskSQLSourceFromSQLFile, err
+		return getSQLFromFileResp{}, err
 	}
 	if exist {
-		return sql, model.TaskSQLSourceFromSQLFile, nil
+		return getSQLFromFileResp{
+			SourceType: model.TaskSQLSourceFromSQLFile,
+			SQLsFromSQLFiles: []SQLsFromSQLFile{{
+				FilePath: fileName,
+				SQLs:     sqlsFromSQLFile}},
+		}, nil
 	}
 
 	// If sql_file is not exist, read it from mybatis xml file.
-	data, exist, err := controller.ReadFileContent(c, InputMyBatisXMLFileName)
+	fileName, data, exist, err := controller.ReadFile(c, InputMyBatisXMLFileName)
 	if err != nil {
-		return "", model.TaskSQLSourceFromMyBatisXMLFile, err
+		return getSQLFromFileResp{}, err
 	}
 	if exist {
-		sql, err := mybatis_parser.ParseXML(data)
+		sqls, err := mybatis_parser.ParseXMLs([]mybatis_parser.XmlFile{{Content: data}}, true)
 		if err != nil {
-			return "", model.TaskSQLSourceFromMyBatisXMLFile, errors.New(errors.ParseMyBatisXMLFileError, err)
+			return getSQLFromFileResp{}, errors.New(errors.ParseMyBatisXMLFileError, err)
 		}
-		return sql, model.TaskSQLSourceFromMyBatisXMLFile, nil
+		sqlsFromXMLs := make([]SQLFromXML, len(sqls))
+		for i := range sqls {
+			sqlsFromXMLs[i] = SQLFromXML{
+				FilePath:  fileName,
+				StartLine: sqls[i].StartLine,
+				SQL:       sqls[i].SQL,
+			}
+		}
+		return getSQLFromFileResp{
+			SourceType:   model.TaskSQLSourceFromMyBatisXMLFile,
+			SQLsFromXMLs: sqlsFromXMLs,
+		}, nil
 	}
-	return "", "", errors.New(errors.DataInvalid, fmt.Errorf("input sql is empty"))
+
+	// If mybatis xml file is not exist, read it from zip file.
+	sqlsFromSQLFiles, sqlsFromXML, exist, err := getSqlsFromZip(c)
+	if err != nil {
+		return getSQLFromFileResp{}, err
+	}
+	if exist {
+		return getSQLFromFileResp{
+			SourceType:       model.TaskSQLSourceFromZipFile,
+			SQLsFromSQLFiles: sqlsFromSQLFiles,
+			SQLsFromXMLs:     sqlsFromXML,
+		}, nil
+	}
+
+	// If zip file is not exist, read it from git repository
+	sqlsFromSQLFiles, sqlsFromJavaFiles, sqlsFromXMLs, exist, err := getSqlsFromGit(c)
+	if err != nil {
+		return getSQLFromFileResp{}, err
+	}
+	if exist {
+		return getSQLFromFileResp{
+			SourceType:       model.TaskSQLSourceFromGitRepository,
+			SQLsFromSQLFiles: append(sqlsFromSQLFiles, sqlsFromJavaFiles...),
+			SQLsFromXMLs:     sqlsFromXMLs,
+		}, nil
+	}
+	return getSQLFromFileResp{}, errors.New(errors.DataInvalid, fmt.Errorf("input sql is empty"))
 }
 
 // @Summary 创建Sql扫描任务并提交审核
@@ -111,6 +159,7 @@ func getSQLFromFile(c echo.Context) (string, string, error) {
 // @Param sql formData string false "sqls for audit"
 // @Param input_sql_file formData file false "input SQL file"
 // @Param input_mybatis_xml_file formData file false "input mybatis XML file"
+// @Param input_zip_file formData file false "input ZIP file"
 // @Success 200 {object} v1.GetAuditTaskResV1
 // @router /v1/projects/{project_name}/tasks/audits [post]
 func CreateAndAuditTask(c echo.Context) error {
@@ -118,83 +167,39 @@ func CreateAndAuditTask(c echo.Context) error {
 	if err := controller.BindAndValidateReq(c, req); err != nil {
 		return err
 	}
-	var sql string
-	var source string
+	var sqls getSQLFromFileResp
 	var err error
 
 	if req.Sql != "" {
-		sql, source = req.Sql, model.TaskSQLSourceFromFormData
+		sqls = getSQLFromFileResp{
+			SourceType:       model.TaskSQLSourceFromFormData,
+			SQLsFromFormData: req.Sql,
+		}
 	} else {
-		sql, source, err = getSQLFromFile(c)
+		sqls, err = getSQLFromFile(c)
 		if err != nil {
 			return controller.JSONBaseErrorReq(c, err)
 		}
 	}
 
-	projectName := c.Param("project_name")
-	userName := controller.GetUserName(c)
-
-	err = CheckIsProjectMember(userName, projectName)
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"))
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
 
 	s := model.GetStorage()
 
-	instance, exist, err := s.GetInstanceByNameAndProjectName(req.InstanceName, projectName)
+	user, err := controller.GetCurrentUser(c, dms.GetUser)
 	if err != nil {
-		return controller.JSONBaseErrorReq(c, err)
-	}
-	if !exist {
-		return controller.JSONBaseErrorReq(c, ErrInstanceNoAccess)
-	}
-	can, err := checkCurrentUserCanAccessInstance(c, instance)
-	if err != nil {
-		return controller.JSONBaseErrorReq(c, err)
-	}
-	if !can {
-		return controller.JSONBaseErrorReq(c, ErrInstanceNoAccess)
-	}
-
-	plugin, err := common.NewDriverManagerWithoutAudit(log.NewEntry(), instance, "")
-	if err != nil {
-		return controller.JSONBaseErrorReq(c, err)
-	}
-	defer plugin.Close(context.TODO())
-
-	if err := plugin.Ping(context.TODO()); err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
 
-	user, err := controller.GetCurrentUser(c)
+	task, err := buildOnlineTaskForAudit(c, s, uint64(user.ID), req.InstanceName, req.InstanceSchema, projectUid, sqls)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
-	}
-	task := &model.Task{
-		Schema:       req.InstanceSchema,
-		InstanceId:   instance.ID,
-		Instance:     instance,
-		CreateUserId: user.ID,
-		ExecuteSQLs:  []*model.ExecuteSQL{},
-		SQLSource:    source,
-		DBType:       instance.DbType,
-	}
-	createAt := time.Now()
-	task.CreatedAt = createAt
-
-	nodes, err := plugin.Parse(context.TODO(), sql)
-	if err != nil {
-		return controller.JSONBaseErrorReq(c, err)
-	}
-	for n, node := range nodes {
-		task.ExecuteSQLs = append(task.ExecuteSQLs, &model.ExecuteSQL{
-			BaseSQL: model.BaseSQL{
-				Number:  uint(n + 1),
-				Content: node.Text,
-			},
-		})
 	}
 	// if task instance is not nil, gorm will update instance when save task.
+	tmpInst := *task.Instance
 	task.Instance = nil
 
 	taskGroup := model.TaskGroup{Tasks: []*model.Task{task}}
@@ -203,7 +208,7 @@ func CreateAndAuditTask(c echo.Context) error {
 		return controller.JSONBaseErrorReq(c, err)
 	}
 
-	task.Instance = instance
+	task.Instance = &tmpInst
 	task, err = server.GetSqled().AddTaskWaitResult(fmt.Sprintf("%d", task.ID), server.ActionTypeAudit)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
@@ -223,15 +228,12 @@ func CreateAndAuditTask(c echo.Context) error {
 // @Success 200 {object} v1.GetAuditTaskResV1
 // @router /v1/tasks/audits/{task_id}/ [get]
 func GetTask(c echo.Context) error {
-	s := model.GetStorage()
 	taskId := c.Param("task_id")
-	task, exist, err := s.GetTaskById(taskId)
+	task, err := getTaskById(c.Request().Context(), taskId)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
-	if !exist {
-		return controller.JSONBaseErrorReq(c, errors.NewTaskNoExistOrNoAccessErr())
-	}
+
 	err = CheckCurrentUserCanViewTask(c, task)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
@@ -241,6 +243,28 @@ func GetTask(c echo.Context) error {
 		BaseRes: controller.NewBaseReq(nil),
 		Data:    convertTaskToRes(task),
 	})
+}
+func GetTaskById(ctx context.Context, taskId string) (*model.Task, error) {
+	return getTaskById(ctx, taskId)
+}
+
+func getTaskById(ctx context.Context, taskId string) (*model.Task, error) {
+	s := model.GetStorage()
+	task, exist, err := s.GetTaskById(taskId)
+	if err != nil {
+		return nil, err
+	}
+	if !exist {
+		return nil, errors.NewTaskNoExistOrNoAccessErr()
+	}
+
+	instance, exist, err := dms.GetInstancesById(ctx, task.InstanceId)
+	if err != nil {
+		return nil, err
+	}
+	task.Instance = instance
+
+	return task, nil
 }
 
 type GetAuditTaskSQLsReqV1 struct {
@@ -291,14 +315,12 @@ func GetTaskSQLs(c echo.Context) error {
 	}
 	s := model.GetStorage()
 	taskId := c.Param("task_id")
-	task, exist, err := s.GetTaskById(taskId)
+	task, err := getTaskById(c.Request().Context(), taskId)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
-	if !exist {
-		return controller.JSONBaseErrorReq(c, errors.NewTaskNoExistOrNoAccessErr())
-	}
-	err = CheckCurrentUserCanViewTask(c, task)
+
+	err = CheckCurrentUserCanViewTaskDMS(c, task)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
@@ -365,13 +387,11 @@ func DownloadTaskSQLReportFile(c echo.Context) error {
 	}
 	s := model.GetStorage()
 	taskId := c.Param("task_id")
-	task, exist, err := s.GetTaskById(taskId)
+	task, err := getTaskById(c.Request().Context(), taskId)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
-	if !exist {
-		return controller.JSONBaseErrorReq(c, errors.NewTaskNoExistOrNoAccessErr())
-	}
+
 	err = CheckCurrentUserCanViewTask(c, task)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
@@ -431,13 +451,11 @@ func DownloadTaskSQLReportFile(c echo.Context) error {
 func DownloadTaskSQLFile(c echo.Context) error {
 	taskId := c.Param("task_id")
 	s := model.GetStorage()
-	task, exist, err := s.GetTaskById(taskId)
+	task, err := getTaskById(c.Request().Context(), taskId)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
-	if !exist {
-		return controller.JSONBaseErrorReq(c, errors.NewTaskNoExistOrNoAccessErr())
-	}
+
 	err = CheckCurrentUserCanViewTask(c, task)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
@@ -474,13 +492,12 @@ type AuditTaskSQLContentResV1 struct {
 func GetAuditTaskSQLContent(c echo.Context) error {
 	taskId := c.Param("task_id")
 	s := model.GetStorage()
-	task, exist, err := s.GetTaskById(taskId)
+
+	task, err := getTaskById(c.Request().Context(), taskId)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
-	if !exist {
-		return controller.JSONBaseErrorReq(c, errors.NewTaskNoExistOrNoAccessErr())
-	}
+
 	err = CheckCurrentUserCanViewTask(c, task)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
@@ -522,13 +539,11 @@ func UpdateAuditTaskSQLs(c echo.Context) error {
 	number := c.Param("number")
 
 	s := model.GetStorage()
-	task, exist, err := s.GetTaskById(taskId)
+	task, err := getTaskById(c.Request().Context(), taskId)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
-	if !exist {
-		return controller.JSONBaseErrorReq(c, errors.NewTaskNoExistOrNoAccessErr())
-	}
+
 	err = CheckCurrentUserCanViewTask(c, task)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
@@ -547,7 +562,16 @@ func UpdateAuditTaskSQLs(c echo.Context) error {
 }
 
 func CheckCurrentUserCanViewTask(c echo.Context, task *model.Task) (err error) {
-	return checkCurrentUserCanAccessTask(c, task, []uint{model.OP_WORKFLOW_VIEW_OTHERS})
+	return checkCurrentUserCanAccessTask(c, task, []dmsV1.OpPermissionType{dmsV1.OpPermissionTypeViewOthersWorkflow})
+}
+
+// TODO 使用DMS的权限校验
+func CheckCurrentUserCanViewTaskDMS(c echo.Context, task *model.Task) error {
+	_, err := controller.GetCurrentUser(c, dms.GetUser)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 type SQLExplain struct {
@@ -623,7 +647,10 @@ func CreateAuditTasksGroupV1(c echo.Context) error {
 	if err := controller.BindAndValidateReq(c, req); err != nil {
 		return err
 	}
-
+	projectUid, err := dms.GetPorjectUIDByName(context.TODO(), c.Param("project_name"))
+	if err != nil {
+		return controller.JSONBaseErrorReq(c, err)
+	}
 	// 数据源个数最大为10
 	if len(req.Instances) > MaximumDataSourceNum {
 		return controller.JSONBaseErrorReq(c, ErrTooManyDataSource)
@@ -636,47 +663,42 @@ func CreateAuditTasksGroupV1(c echo.Context) error {
 
 	distinctInstNames := utils.RemoveDuplicate(instNames)
 
-	projectName := c.Param("project_name")
-	userName := controller.GetUserName(c)
-
-	err := CheckIsProjectMember(userName, projectName)
+	user, err := controller.GetCurrentUser(c, dms.GetUser)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
 
 	s := model.GetStorage()
-	instances, err := s.GetInstancesByNamesAndProjectName(distinctInstNames, projectName)
+
+	instances, err := dms.GetInstancesInProjectByNames(c.Request().Context(), projectUid, distinctInstNames)
 	if err != nil {
 		return controller.JSONBaseErrorReq(c, err)
 	}
 
 	nameInstanceMap := make(map[string]*model.Instance, len(req.Instances))
-	for _, instance := range instances {
-		nameInstanceMap[instance.Name] = instance
-	}
-
-	// check instances
-	if len(instances) != len(distinctInstNames) {
-		return controller.JSONBaseErrorReq(c, ErrInstanceNoAccess)
-	}
-
-	can, err := checkCurrentUserCanAccessInstances(c, instances)
-	if err != nil {
-		return controller.JSONBaseErrorReq(c, err)
-	}
-	if !can {
-		return controller.JSONBaseErrorReq(c, ErrInstanceNoAccess)
-	}
-
-	for _, instance := range instances {
-		if err := common.CheckInstanceIsConnectable(instance); err != nil {
+	for _, inst := range instances {
+		// https://github.com/actiontech/sqle/issues/1673
+		inst, exist, err := dms.GetInstanceInProjectByName(c.Request().Context(), projectUid, inst.Name)
+		if err != nil {
 			return controller.JSONBaseErrorReq(c, err)
 		}
-	}
+		if !exist {
+			return controller.JSONBaseErrorReq(c, ErrInstanceNoAccess)
+		}
 
-	user, err := controller.GetCurrentUser(c)
-	if err != nil {
-		return controller.JSONBaseErrorReq(c, err)
+		can, err := CheckCurrentUserCanAccessInstances(c.Request().Context(), projectUid, user.GetIDStr(), instances)
+		if err != nil {
+			return controller.JSONBaseErrorReq(c, err)
+		}
+		if !can {
+			return controller.JSONBaseErrorReq(c, ErrInstanceNoAccess)
+		}
+
+		if err := common.CheckInstanceIsConnectable(inst); err != nil {
+			return controller.JSONBaseErrorReq(c, err)
+		}
+
+		nameInstanceMap[inst.Name] = inst
 	}
 
 	tasks := make([]*model.Task, len(req.Instances))
@@ -684,7 +706,7 @@ func CreateAuditTasksGroupV1(c echo.Context) error {
 		tasks[i] = &model.Task{
 			Schema:       reqInstance.InstanceSchema,
 			InstanceId:   nameInstanceMap[reqInstance.InstanceName].ID,
-			CreateUserId: user.ID,
+			CreateUserId: uint64(user.ID),
 			DBType:       nameInstanceMap[reqInstance.InstanceName].DbType,
 		}
 		tasks[i].CreatedAt = time.Now()
@@ -724,6 +746,7 @@ type AuditTaskGroupResV1 struct {
 // @Description 1. formData[sql]: sql content;
 // @Description 2. file[input_sql_file]: it is a sql file;
 // @Description 3. file[input_mybatis_xml_file]: it is mybatis xml file, sql will be parsed from it.
+// @Description 4. file[input_zip_file]: it is zip file, sql will be parsed from it.
 // @Accept mpfd
 // @Produce json
 // @Tags task
@@ -733,6 +756,7 @@ type AuditTaskGroupResV1 struct {
 // @Param sql formData string false "sqls for audit"
 // @Param input_sql_file formData file false "input SQL file"
 // @Param input_mybatis_xml_file formData file false "input mybatis XML file"
+// @Param input_zip_file formData file false "input ZIP file"
 // @Success 200 {object} v1.AuditTaskGroupResV1
 // @router /v1/task_groups/audit [post]
 func AuditTaskGroupV1(c echo.Context) error {
@@ -742,13 +766,14 @@ func AuditTaskGroupV1(c echo.Context) error {
 	}
 
 	var err error
-	var sql string
-	var source string
-
+	var sqls getSQLFromFileResp
 	if req.Sql != "" {
-		sql, source = req.Sql, model.TaskSQLSourceFromFormData
+		sqls = getSQLFromFileResp{
+			SourceType:       model.TaskSQLSourceFromFormData,
+			SQLsFromFormData: req.Sql,
+		}
 	} else {
-		sql, source, err = getSQLFromFile(c)
+		sqls, err = getSQLFromFile(c)
 		if err != nil {
 			return controller.JSONBaseErrorReq(c, err)
 		}
@@ -762,43 +787,42 @@ func AuditTaskGroupV1(c echo.Context) error {
 
 	tasks := taskGroup.Tasks
 
-	instances := make([]*model.Instance, 0)
-	for _, task := range tasks {
-		instances = append(instances, task.Instance)
-	}
+	{
+		instanceIds := make([]uint64, 0, len(tasks))
+		for _, task := range tasks {
+			instanceIds = append(instanceIds, task.InstanceId)
+		}
 
-	can, err := checkCurrentUserCanAccessInstances(c, instances)
-	if err != nil {
-		return controller.JSONBaseErrorReq(c, err)
-	}
-	if !can {
-		return controller.JSONBaseErrorReq(c, ErrInstanceNoAccess)
-	}
+		instances, err := dms.GetInstancesByIds(c.Request().Context(), instanceIds)
+		if err != nil {
+			return controller.JSONBaseErrorReq(c, err)
+		}
 
-	l := log.NewEntry()
+		// 因为这个接口数据源属于同一个项目,取第一个DB所属项目
+		projectId := instances[0].ProjectId
+		can, err := CheckCurrentUserCanAccessInstances(c.Request().Context(), projectId, controller.GetUserID(c), instances)
+		if err != nil {
+			return controller.JSONBaseErrorReq(c, err)
+		}
+		if !can {
+			return controller.JSONBaseErrorReq(c, ErrInstanceNoAccess)
+		}
 
-	// 因为这个接口数据源必然相同，所以只取第一个实例的DbType即可
-	dbType := instances[0].DbType
-	plugin, err := common.NewDriverManagerWithoutCfg(l, dbType)
-	if err != nil {
-		return controller.JSONBaseErrorReq(c, err)
-	}
-	defer plugin.Close(context.TODO())
+		l := log.NewEntry()
 
-	nodes, err := plugin.Parse(context.TODO(), sql)
-	if err != nil {
-		return controller.JSONBaseErrorReq(c, err)
-	}
+		// 因为这个接口数据源必然相同，所以只取第一个实例的DbType即可
+		dbType := instances[0].DbType
+		plugin, err := common.NewDriverManagerWithoutCfg(l, dbType)
+		if err != nil {
+			return controller.JSONBaseErrorReq(c, err)
+		}
+		defer plugin.Close(context.TODO())
 
-	for _, task := range tasks {
-		task.SQLSource = source
-		for j, node := range nodes {
-			task.ExecuteSQLs = append(task.ExecuteSQLs, &model.ExecuteSQL{
-				BaseSQL: model.BaseSQL{
-					Number:  uint(j + 1),
-					Content: node.Text,
-				},
-			})
+		for _, task := range tasks {
+			err := addSQLsFromFileToTasks(sqls, task, plugin)
+			if err != nil {
+				return controller.JSONBaseErrorReq(c, errors.New(errors.GenericError, fmt.Errorf("add sqls from file to task failed: %v", err)))
+			}
 		}
 	}
 

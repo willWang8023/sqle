@@ -25,6 +25,40 @@ var doc = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/v1/audit_files": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Direct audit sql from SQL files and MyBatis files",
+                "tags": [
+                    "sql_audit"
+                ],
+                "summary": "直接从文件内容提取SQL并审核，SQL文件暂时只支持一次解析一个文件",
+                "operationId": "directAuditFilesV1",
+                "parameters": [
+                    {
+                        "description": "files that should be audited",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.DirectAuditFileReqV1"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.DirectAuditResV1"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/audit_plan_metas": {
             "get": {
                 "security": [
@@ -79,19 +113,62 @@ var doc = `{
                 }
             }
         },
-        "/v1/basic_info": {
+        "/v1/company_notice": {
             "get": {
-                "description": "get sqle basic info",
-                "tags": [
-                    "global"
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
                 ],
-                "summary": "获取 sqle 基本信息",
-                "operationId": "getSQLEInfoV1",
+                "description": "get company notice info",
+                "tags": [
+                    "companyNotice"
+                ],
+                "summary": "获取企业公告",
+                "operationId": "getCompanyNotice",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v1.GetSQLEInfoResV1"
+                            "$ref": "#/definitions/v1.GetCompanyNoticeResp"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "update company notice info",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "companyNotice"
+                ],
+                "summary": "更新企业公告",
+                "operationId": "updateCompanyNotice",
+                "parameters": [
+                    {
+                        "description": "company notice",
+                        "name": "companyNotice",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.UpdateCompanyNoticeReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.BaseRes"
                         }
                     }
                 }
@@ -204,24 +281,24 @@ var doc = `{
                 }
             }
         },
-        "/v1/configurations/feishu": {
+        "/v1/configurations/feishu_audit": {
             "get": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "get feishu configuration",
+                "description": "get feishu audit configuration",
                 "tags": [
                     "configuration"
                 ],
-                "summary": "获取飞书配置",
-                "operationId": "getFeishuConfigurationV1",
+                "summary": "获取飞书审核配置",
+                "operationId": "getFeishuAuditConfigurationV1",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v1.GetFeishuConfigurationResV1"
+                            "$ref": "#/definitions/v1.GetFeishuAuditConfigurationResV1"
                         }
                     }
                 }
@@ -232,7 +309,7 @@ var doc = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "update feishu configuration",
+                "description": "update feishu audit configuration",
                 "consumes": [
                     "application/json"
                 ],
@@ -240,10 +317,10 @@ var doc = `{
                     "configuration"
                 ],
                 "summary": "添加或更新飞书配置",
-                "operationId": "updateFeishuConfigurationV1",
+                "operationId": "updateFeishuAuditConfigurationV1",
                 "parameters": [
                     {
-                        "description": "update feishu configuration req",
+                        "description": "update feishu audit configuration req",
                         "name": "param",
                         "in": "body",
                         "required": true,
@@ -262,22 +339,22 @@ var doc = `{
                 }
             }
         },
-        "/v1/configurations/feishu/test": {
+        "/v1/configurations/feishu_audit/test": {
             "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "test feishu configuration",
+                "description": "test feishu audit configuration",
                 "consumes": [
                     "application/json"
                 ],
                 "tags": [
                     "configuration"
                 ],
-                "summary": "测试飞书配置",
-                "operationId": "testFeishuConfigV1",
+                "summary": "测试飞书审批配置",
+                "operationId": "testFeishuAuditConfigV1",
                 "parameters": [
                     {
                         "description": "test feishu configuration req",
@@ -294,64 +371,6 @@ var doc = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v1.TestFeishuConfigResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/configurations/ldap": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get LDAP configuration",
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "获取 LDAP 配置",
-                "operationId": "getLDAPConfigurationV1",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetLDAPConfigurationResV1"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update LDAP configuration",
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "添加 LDAP 配置",
-                "operationId": "updateLDAPConfigurationV1",
-                "parameters": [
-                    {
-                        "description": "update LDAP configuration req",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.LDAPConfigurationReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
                         }
                     }
                 }
@@ -471,269 +490,6 @@ var doc = `{
                 }
             }
         },
-        "/v1/configurations/oauth2": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get Oauth2 configuration",
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "获取 Oauth2 配置",
-                "operationId": "getOauth2ConfigurationV1",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetOauth2ConfigurationResV1"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update Oauth2 configuration",
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "修改 Oauth2 配置",
-                "operationId": "updateOauth2ConfigurationV1",
-                "parameters": [
-                    {
-                        "description": "update Oauth2 configuration req",
-                        "name": "conf",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.Oauth2ConfigurationReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/configurations/oauth2/tips": {
-            "get": {
-                "description": "get Oauth2 tips",
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "获取 Oauth2 基本信息",
-                "operationId": "getOauth2Tips",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetOauth2TipsResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/configurations/personalise": {
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update personalise config",
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "更新个性化设置",
-                "operationId": "personalise",
-                "parameters": [
-                    {
-                        "description": "personalise req",
-                        "name": "conf",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.PersonaliseReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/configurations/personalise/logo": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "upload logo",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "上传Logo",
-                "operationId": "uploadLogo",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "logo file",
-                        "name": "logo",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.UploadLogoResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/configurations/smtp": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get SMTP configuration",
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "获取 SMTP 配置",
-                "operationId": "getSMTPConfigurationV1",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetSMTPConfigurationResV1"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update SMTP configuration",
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "添加 SMTP 配置",
-                "operationId": "updateSMTPConfigurationV1",
-                "parameters": [
-                    {
-                        "description": "update SMTP configuration req",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UpdateSMTPConfigurationReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/configurations/smtp/test": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "test SMTP configuration",
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "测试 邮箱 配置",
-                "operationId": "testSMTPConfigurationV1",
-                "parameters": [
-                    {
-                        "description": "test SMTP configuration req",
-                        "name": "req",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.TestSMTPConfigurationReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.TestSMTPConfigurationResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/configurations/sql_query": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get sqle query configuration",
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "获取SQL查询配置信息",
-                "operationId": "getSQLQueryConfiguration",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetSQLQueryConfigurationResV1"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/configurations/system_variables": {
             "get": {
                 "security": [
@@ -787,179 +543,6 @@ var doc = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/configurations/webhook": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get workflow webhook config",
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "获取全局工单 WebHook 配置",
-                "operationId": "getGlobalWorkflowWebHookConfig",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetWorkflowWebHookConfigResV1"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update webhook config",
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "更新工单 WebHook 配置",
-                "operationId": "updateGlobalWebHookConfig",
-                "parameters": [
-                    {
-                        "description": "update webhook config",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.WebHookConfigV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/configurations/webhook/test": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "test workflow webhook config",
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "测试全局工单 WebHook 配置",
-                "operationId": "testGlobalWorkflowWebHookConfig",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.TestWorkflowWebHookConfigResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/configurations/wechat": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get WeChat configuration",
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "获取 企业微信 配置",
-                "operationId": "getWeChatConfigurationV1",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetWeChatConfigurationResV1"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update WeChat configuration",
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "添加 企业微信 配置",
-                "operationId": "updateWeChatConfigurationV1",
-                "parameters": [
-                    {
-                        "description": "update WeChat configuration req",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UpdateWeChatConfigurationReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/configurations/wechat/test": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "test WeChat configuration",
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "测试 企业微信 配置",
-                "operationId": "testWeChatConfigurationV1",
-                "parameters": [
-                    {
-                        "description": "test WeChat configuration req",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.TestWeChatConfigurationReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.TestWeChatConfigurationResV1"
                         }
                     }
                 }
@@ -1084,7 +667,7 @@ var doc = `{
                         "type": "string",
                         "description": "rule id",
                         "name": "rule_id",
-                        "in": "query",
+                        "in": "path",
                         "required": true
                     }
                 ],
@@ -1114,7 +697,7 @@ var doc = `{
                         "type": "string",
                         "description": "rule id",
                         "name": "rule_id",
-                        "in": "query",
+                        "in": "path",
                         "required": true
                     }
                 ],
@@ -1144,7 +727,7 @@ var doc = `{
                         "type": "string",
                         "description": "rule id",
                         "name": "rule_id",
-                        "in": "query",
+                        "in": "path",
                         "required": true
                     },
                     {
@@ -1196,201 +779,6 @@ var doc = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v1.GetDashboardResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/dashboard/project_tips": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get dashboard project tips",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard"
-                ],
-                "summary": "获取dashboard项目提示列表",
-                "operationId": "getDashboardProjectTipsV1",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetDashboardProjectTipsResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/instance_additional_metas": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get instance additional metas",
-                "tags": [
-                    "instance"
-                ],
-                "summary": "获取实例的额外属性列表",
-                "operationId": "getInstanceAdditionalMetas",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetInstanceAdditionalMetasResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/instance_connection": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "test instance db connection 注：可直接提交创建实例接口的body，该接口的json 内容是创建实例的 json 的子集",
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "instance"
-                ],
-                "summary": "实例连通性测试（实例提交前）",
-                "operationId": "checkInstanceIsConnectableV1",
-                "parameters": [
-                    {
-                        "description": "instance info",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetInstanceConnectableReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetInstanceConnectableResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/login": {
-            "post": {
-                "description": "user login",
-                "tags": [
-                    "user"
-                ],
-                "summary": "用户登录",
-                "operationId": "loginV1",
-                "parameters": [
-                    {
-                        "description": "user login request",
-                        "name": "user",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UserLoginReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetUserLoginResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/logout": {
-            "post": {
-                "description": "user logout",
-                "tags": [
-                    "user"
-                ],
-                "summary": "用户登出",
-                "operationId": "logoutV1",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/management_permissions": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get platform management permissions",
-                "tags": [
-                    "management_permission"
-                ],
-                "summary": "获取平台管理权限列表",
-                "operationId": "GetManagementPermissionsV1",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetManagementPermissionsResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/oauth2/link": {
-            "get": {
-                "description": "oauth2 link",
-                "tags": [
-                    "oauth2"
-                ],
-                "summary": "oauth2通过此链接跳转到第三方登录网址",
-                "operationId": "Oauth2Link"
-            }
-        },
-        "/v1/oauth2/user/bind": {
-            "post": {
-                "description": "bind Oauth2 user to sqle",
-                "tags": [
-                    "oauth2"
-                ],
-                "summary": "绑定 Oauth2 和 sqle用户",
-                "operationId": "bindOauth2User",
-                "parameters": [
-                    {
-                        "description": "bind oauth2 user req",
-                        "name": "conf",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.BindOauth2UserReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.BindOauth2UserResV1"
                         }
                     }
                 }
@@ -1596,263 +984,6 @@ var doc = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v1.GetOperationsResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/project_tips": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get project tip list",
-                "tags": [
-                    "project"
-                ],
-                "summary": "获取项目提示列表",
-                "operationId": "getProjectTipsV1",
-                "parameters": [
-                    {
-                        "enum": [
-                            "operation_record"
-                        ],
-                        "type": "string",
-                        "description": "functional module",
-                        "name": "functional_module",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetProjectTipsResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/projects": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get project list",
-                "tags": [
-                    "project"
-                ],
-                "summary": "获取项目列表",
-                "operationId": "getProjectListV1",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "page index",
-                        "name": "page_index",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "default": 50,
-                        "description": "size of per page",
-                        "name": "page_size",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetProjectResV1"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "create project",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "project"
-                ],
-                "summary": "创建项目",
-                "operationId": "createProjectV1",
-                "parameters": [
-                    {
-                        "description": "create project request",
-                        "name": "project",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.CreateProjectReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/projects/{project_name}/": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get project detail",
-                "tags": [
-                    "project"
-                ],
-                "summary": "获取项目详情",
-                "operationId": "getProjectDetailV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetProjectDetailResV1"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "delete project",
-                "tags": [
-                    "project"
-                ],
-                "summary": "删除项目",
-                "operationId": "deleteProjectV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update project",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "project"
-                ],
-                "summary": "更新项目",
-                "operationId": "updateProjectV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "create project request",
-                        "name": "project",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UpdateProjectReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/projects/{project_name}/archive": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "archive project",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "project"
-                ],
-                "summary": "归档项目",
-                "operationId": "archiveProjectV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
                         }
                     }
                 }
@@ -2315,6 +1446,52 @@ var doc = `{
                 }
             }
         },
+        "/v1/projects/{project_name}/audit_plans/{audit_plan_name}/reports/{audit_plan_report_id}/export": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "export audit plan report as csv",
+                "tags": [
+                    "audit_plan"
+                ],
+                "summary": "以csv的形式导出扫描报告",
+                "operationId": "exportAuditPlanReportV1",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "project name",
+                        "name": "project_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "audit plan name",
+                        "name": "audit_plan_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "audit plan report id",
+                        "name": "audit_plan_report_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "get export audit plan report",
+                        "schema": {
+                            "type": "file"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/projects/{project_name}/audit_plans/{audit_plan_name}/reports/{audit_plan_report_id}/sqls": {
             "get": {
                 "security": [
@@ -2494,6 +1671,7 @@ var doc = `{
                 ],
                 "summary": "全量同步SQL到扫描任务",
                 "operationId": "fullSyncAuditPlanSQLsV1",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -2542,6 +1720,7 @@ var doc = `{
                 ],
                 "summary": "增量同步SQL到扫描任务",
                 "operationId": "partialSyncAuditPlanSQLsV1",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -2828,7 +2007,8 @@ var doc = `{
                     {
                         "enum": [
                             "create_audit_plan",
-                            "create_workflow"
+                            "create_workflow",
+                            "sql_manage"
                         ],
                         "type": "string",
                         "description": "functional module",
@@ -2841,131 +2021,6 @@ var doc = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v1.GetInstanceTipsResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/projects/{project_name}/instances": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get instance info list",
-                "tags": [
-                    "instance"
-                ],
-                "summary": "获取实例信息列表",
-                "operationId": "getInstanceListV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter instance name",
-                        "name": "filter_instance_name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter db type",
-                        "name": "filter_db_type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter db host",
-                        "name": "filter_db_host",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter db port",
-                        "name": "filter_db_port",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter db user",
-                        "name": "filter_db_user",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter rule template name",
-                        "name": "filter_rule_template_name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "page index",
-                        "name": "page_index",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "size of per page",
-                        "name": "page_size",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetInstancesResV1"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "create a instance",
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "instance"
-                ],
-                "summary": "添加实例",
-                "operationId": "createInstanceV1",
-                "deprecated": true,
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "add instance",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.CreateInstanceReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
                         }
                     }
                 }
@@ -3007,128 +2062,6 @@ var doc = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v1.BatchGetInstanceConnectionsResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/projects/{project_name}/instances/{instance_name}/": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get instance db",
-                "tags": [
-                    "instance"
-                ],
-                "summary": "获取实例信息",
-                "operationId": "getInstanceV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "instance name",
-                        "name": "instance_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetInstanceResV1"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "delete instance db",
-                "tags": [
-                    "instance"
-                ],
-                "summary": "删除实例",
-                "operationId": "deleteInstanceV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "instance name",
-                        "name": "instance_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update instance",
-                "tags": [
-                    "instance"
-                ],
-                "summary": "更新实例",
-                "operationId": "updateInstanceV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "instance name",
-                        "name": "instance_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "update instance request",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UpdateInstanceReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
                         }
                     }
                 }
@@ -3350,500 +2283,6 @@ var doc = `{
                 }
             }
         },
-        "/v1/projects/{project_name}/member_groups": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get member groups",
-                "tags": [
-                    "user_group"
-                ],
-                "summary": "获取成员组列表",
-                "operationId": "getMemberGroupsV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "filter user group name",
-                        "name": "filter_user_group_name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter instance name",
-                        "name": "filter_instance_name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "page index",
-                        "name": "page_index",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "size of per page",
-                        "name": "page_size",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetMemberGroupsRespV1"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "add member group",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user_group"
-                ],
-                "summary": "添加成员组",
-                "operationId": "addMemberGroupV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "add member group",
-                        "name": "data",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.CreateMemberGroupReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/projects/{project_name}/member_groups/{user_group_name}/": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get member group",
-                "tags": [
-                    "user_group"
-                ],
-                "summary": "获取成员组信息",
-                "operationId": "getMemberGroupV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "user group name",
-                        "name": "user_group_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetMemberGroupRespV1"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "delete member group",
-                "tags": [
-                    "user_group"
-                ],
-                "summary": "删除成员组",
-                "operationId": "deleteMemberGroupV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "user group name",
-                        "name": "user_group_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update member group",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user_group"
-                ],
-                "summary": "修改成员组",
-                "operationId": "updateMemberGroupV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "user group name",
-                        "name": "user_group_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "update member_group",
-                        "name": "data",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UpdateMemberGroupReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/projects/{project_name}/member_tips": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get member tip list",
-                "tags": [
-                    "user"
-                ],
-                "summary": "获取成员提示列表",
-                "operationId": "getMemberTipListV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetMemberTipsResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/projects/{project_name}/members": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get members",
-                "tags": [
-                    "user"
-                ],
-                "summary": "获取成员列表",
-                "operationId": "getMembersV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "filter user name",
-                        "name": "filter_user_name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter instance name",
-                        "name": "filter_instance_name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "page index",
-                        "name": "page_index",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "size of per page",
-                        "name": "page_size",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetMembersRespV1"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "add member",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "添加成员",
-                "operationId": "addMemberV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "add member",
-                        "name": "data",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.CreateMemberReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/projects/{project_name}/members/{user_name}/": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get member",
-                "tags": [
-                    "user"
-                ],
-                "summary": "获取成员信息",
-                "operationId": "getMemberV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "user name",
-                        "name": "user_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetMemberRespV1"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "delete member",
-                "tags": [
-                    "user"
-                ],
-                "summary": "删除成员",
-                "operationId": "deleteMemberV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "user name",
-                        "name": "user_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update member",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "修改成员",
-                "operationId": "updateMemberV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "user name",
-                        "name": "user_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "update member",
-                        "name": "data",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UpdateMemberReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/projects/{project_name}/rule_template_tips": {
             "get": {
                 "security": [
@@ -3997,6 +2436,12 @@ var doc = `{
                         "name": "rule_template_name",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "fuzzy rule,keyword for desc and annotation",
+                        "name": "fuzzy_keyword_rule",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -4177,6 +2622,717 @@ var doc = `{
                         "description": "sqle rule template file",
                         "schema": {
                             "type": "file"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/projects/{project_name}/sql_audit_records": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "get sql audit records",
+                "tags": [
+                    "sql_audit_record"
+                ],
+                "summary": "获取SQL审核记录列表",
+                "operationId": "getSQLAuditRecordsV1",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "fuzzy search tags",
+                        "name": "fuzzy_search_tags",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "auditing",
+                            "successfully"
+                        ],
+                        "type": "string",
+                        "description": "filter sql audit status",
+                        "name": "filter_sql_audit_status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "filter instance id",
+                        "name": "filter_instance_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "filter create time from",
+                        "name": "filter_create_time_from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "filter create time to",
+                        "name": "filter_create_time_to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "filter sql audit record ids",
+                        "name": "filter_sql_audit_record_ids",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "page index",
+                        "name": "page_index",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "size of per page",
+                        "name": "page_size",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "project name",
+                        "name": "project_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.GetSQLAuditRecordsResV1"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "SQL audit\n1. formData[sql]: sql content;\n2. file[input_sql_file]: it is a sql file;\n3. file[input_mybatis_xml_file]: it is mybatis xml file, sql will be parsed from it.\n4. file[input_zip_file]: it is ZIP file that sql will be parsed from xml or sql file inside it.\n5. formData[git_http_url]:the url which scheme is http(s) and end with .git.\n6. formData[git_user_name]:The name of the user who owns the repository read access.\n7. formData[git_user_password]:The password corresponding to git_user_name.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sql_audit_record"
+                ],
+                "summary": "SQL审核",
+                "operationId": "CreateSQLAuditRecordV1",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "project name",
+                        "name": "project_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "instance name",
+                        "name": "instance_name",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "schema of instance",
+                        "name": "instance_schema",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "db type of instance",
+                        "name": "db_type",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "sqls for audit",
+                        "name": "sqls",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "input SQL file",
+                        "name": "input_sql_file",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "input mybatis XML file",
+                        "name": "input_mybatis_xml_file",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "input ZIP file",
+                        "name": "input_zip_file",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "git repository url",
+                        "name": "git_http_url",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "the name of user to clone the repository",
+                        "name": "git_user_name",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "the password corresponding to git_user_name",
+                        "name": "git_user_password",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.CreateSQLAuditRecordResV1"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/projects/{project_name}/sql_audit_records/tag_tips": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "get sql audit record tag tips",
+                "tags": [
+                    "sql_audit_record"
+                ],
+                "summary": "获取SQL审核记录标签列表",
+                "operationId": "GetSQLAuditRecordTagTipsV1",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "project name",
+                        "name": "project_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.GetSQLAuditRecordTagTipsResV1"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/projects/{project_name}/sql_audit_records/{sql_audit_record_id}/": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "get sql audit record info",
+                "tags": [
+                    "sql_audit_record"
+                ],
+                "summary": "获取SQL审核记录信息",
+                "operationId": "getSQLAuditRecordV1",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "project name",
+                        "name": "project_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "sql audit record id",
+                        "name": "sql_audit_record_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.GetSQLAuditRecordResV1"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "update SQL audit record",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sql_audit_record"
+                ],
+                "summary": "更新SQL审核记录",
+                "operationId": "updateSQLAuditRecordV1",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "project name",
+                        "name": "project_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "sql audit record id",
+                        "name": "sql_audit_record_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "update SQL audit record",
+                        "name": "param",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.UpdateSQLAuditRecordReqV1"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.BaseRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/projects/{project_name}/sql_manages": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "get sql manage list",
+                "tags": [
+                    "SqlManage"
+                ],
+                "summary": "获取管控sql列表",
+                "operationId": "GetSqlManageList",
+                "deprecated": true,
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "project name",
+                        "name": "project_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "fuzzy search sql fingerprint",
+                        "name": "fuzzy_search_sql_fingerprint",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "assignee",
+                        "name": "filter_assignee",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "instance name",
+                        "name": "filter_instance_name",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "audit_plan",
+                            "sql_audit_record"
+                        ],
+                        "type": "string",
+                        "description": "source",
+                        "name": "filter_source",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "normal",
+                            "notice",
+                            "warn",
+                            "error"
+                        ],
+                        "type": "string",
+                        "description": "audit level",
+                        "name": "filter_audit_level",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "last audit start time from",
+                        "name": "filter_last_audit_start_time_from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "last audit start time to",
+                        "name": "filter_last_audit_start_time_to",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "unhandled",
+                            "solved",
+                            "ignored",
+                            "manual_audited"
+                        ],
+                        "type": "string",
+                        "description": "status",
+                        "name": "filter_status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "rule name",
+                        "name": "filter_rule_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "db type",
+                        "name": "filter_db_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "fuzzy search endpoint",
+                        "name": "fuzzy_search_endpoint",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "fuzzy search schema name",
+                        "name": "fuzzy_search_schema_name",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "first_appear_timestamp",
+                            "last_receive_timestamp",
+                            "fp_count"
+                        ],
+                        "type": "string",
+                        "description": "sort field",
+                        "name": "sort_field",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "sort order",
+                        "name": "sort_order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "page index",
+                        "name": "page_index",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "size of per page",
+                        "name": "page_size",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.GetSqlManageListResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/projects/{project_name}/sql_manages/batch": {
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "batch update sql manage",
+                "tags": [
+                    "SqlManage"
+                ],
+                "summary": "批量更新SQL管控",
+                "operationId": "BatchUpdateSqlManage",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "project name",
+                        "name": "project_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "batch update sql manage request",
+                        "name": "BatchUpdateSqlManageReq",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.BatchUpdateSqlManageReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.BaseRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/projects/{project_name}/sql_manages/exports": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "export sql manage",
+                "tags": [
+                    "SqlManage"
+                ],
+                "summary": "导出SQL管控",
+                "operationId": "exportSqlManageV1",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "project name",
+                        "name": "project_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "fuzzy search sql fingerprint",
+                        "name": "fuzzy_search_sql_fingerprint",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "assignee",
+                        "name": "filter_assignee",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "instance name",
+                        "name": "filter_instance_name",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "audit_plan",
+                            "sql_audit_record"
+                        ],
+                        "type": "string",
+                        "description": "source",
+                        "name": "filter_source",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "normal",
+                            "notice",
+                            "warn",
+                            "error"
+                        ],
+                        "type": "string",
+                        "description": "audit level",
+                        "name": "filter_audit_level",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "last audit start time from",
+                        "name": "filter_last_audit_start_time_from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "last audit start time to",
+                        "name": "filter_last_audit_start_time_to",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "unhandled",
+                            "solved",
+                            "ignored",
+                            "manual_audited"
+                        ],
+                        "type": "string",
+                        "description": "status",
+                        "name": "filter_status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "db type",
+                        "name": "filter_db_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "rule name",
+                        "name": "filter_rule_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "fuzzy search endpoint",
+                        "name": "fuzzy_search_endpoint",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "fuzzy search schema name",
+                        "name": "fuzzy_search_schema_name",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "first_appear_timestamp",
+                            "last_receive_timestamp",
+                            "fp_count"
+                        ],
+                        "type": "string",
+                        "description": "sort field",
+                        "name": "sort_field",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "sort order",
+                        "name": "sort_order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "export sql manage",
+                        "schema": {
+                            "type": "file"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/projects/{project_name}/sql_manages/rule_tips": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "get sql manage rule tips",
+                "tags": [
+                    "SqlManage"
+                ],
+                "summary": "获取管控规则tips",
+                "operationId": "GetSqlManageRuleTips",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "project name",
+                        "name": "project_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.GetSqlManageRuleTipsResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/projects/{project_name}/sql_manages/{sql_manage_id}/sql_analysis": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "get sql manage analysis",
+                "tags": [
+                    "SqlManage"
+                ],
+                "summary": "获取SQL管控SQL分析",
+                "operationId": "GetSqlManageSqlAnalysisV1",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "project name",
+                        "name": "project_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "sql manage id",
+                        "name": "sql_manage_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.GetSqlManageSqlAnalysisResp"
                         }
                     }
                 }
@@ -4574,6 +3730,12 @@ var doc = `{
                         "description": "input mybatis XML file",
                         "name": "input_mybatis_xml_file",
                         "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "input ZIP file",
+                        "name": "input_zip_file",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
@@ -4581,44 +3743,6 @@ var doc = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v1.GetAuditTaskResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/projects/{project_name}/unarchive": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "archive project",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "project"
-                ],
-                "summary": "取消归档项目",
-                "operationId": "unarchiveProjectV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
                         }
                     }
                 }
@@ -4729,6 +3853,12 @@ var doc = `{
                     },
                     {
                         "type": "string",
+                        "description": "fuzzy search by workflow description",
+                        "name": "fuzzy_search_workflow_desc",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "filter create time from",
                         "name": "filter_create_time_from",
                         "in": "query"
@@ -4753,8 +3883,8 @@ var doc = `{
                     },
                     {
                         "type": "string",
-                        "description": "filter create user name",
-                        "name": "filter_create_user_name",
+                        "description": "filter create user id",
+                        "name": "filter_create_user_id",
                         "in": "query"
                     },
                     {
@@ -4774,8 +3904,8 @@ var doc = `{
                     },
                     {
                         "type": "string",
-                        "description": "filter current step assignee user name",
-                        "name": "filter_current_step_assignee_user_name",
+                        "description": "filter current step assignee user id",
+                        "name": "filter_current_step_assignee_user_id",
                         "in": "query"
                     },
                     {
@@ -4804,6 +3934,12 @@ var doc = `{
                         "name": "project_name",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "fuzzy matching subject/workflow_id",
+                        "name": "fuzzy_keyword",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -4968,6 +4104,12 @@ var doc = `{
                     },
                     {
                         "type": "string",
+                        "description": "fuzzy search by workflow description",
+                        "name": "fuzzy_search_workflow_desc",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "filter create time from",
                         "name": "filter_create_time_from",
                         "in": "query"
@@ -4992,8 +4134,8 @@ var doc = `{
                     },
                     {
                         "type": "string",
-                        "description": "filter create user name",
-                        "name": "filter_create_user_name",
+                        "description": "filter create user id",
+                        "name": "filter_create_user_id",
                         "in": "query"
                     },
                     {
@@ -5013,8 +4155,8 @@ var doc = `{
                     },
                     {
                         "type": "string",
-                        "description": "filter current step assignee user name",
-                        "name": "filter_current_step_assignee_user_name",
+                        "description": "filter current step assignee user id",
+                        "name": "filter_current_step_assignee_user_id",
                         "in": "query"
                     },
                     {
@@ -5029,6 +4171,12 @@ var doc = `{
                         "name": "project_name",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "fuzzy matching subject/workflow_id/desc",
+                        "name": "fuzzy_keyword",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -5551,142 +4699,31 @@ var doc = `{
                 }
             }
         },
-        "/v1/role_tips": {
+        "/v1/rule_knowledge/db_types/{db_type}/custom_rules/{rule_name}/": {
             "get": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "get role tip list",
+                "description": "get custom rule knowledge",
                 "tags": [
-                    "role"
+                    "rule_template"
                 ],
-                "summary": "获取角色提示列表",
-                "operationId": "getRoleTipListV1",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetRoleTipsResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/roles": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get role list",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "role"
-                ],
-                "summary": "获取角色列表",
-                "operationId": "getRoleListV1",
+                "summary": "查看自定义规则知识库",
+                "operationId": "getCustomRuleKnowledgeV1",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "filter role name",
-                        "name": "filter_role_name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "page index",
-                        "name": "page_index",
-                        "in": "query",
+                        "description": "rule name",
+                        "name": "rule_name",
+                        "in": "path",
                         "required": true
                     },
-                    {
-                        "type": "integer",
-                        "description": "size of per page",
-                        "name": "page_size",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetRolesResV1"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "create role",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "role"
-                ],
-                "summary": "创建角色",
-                "operationId": "createRoleV1",
-                "parameters": [
-                    {
-                        "description": "create role",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.CreateRoleReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/roles/{role_name}/": {
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "delete role",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "role"
-                ],
-                "summary": "删除角色",
-                "operationId": "deleteRoleV1",
-                "parameters": [
                     {
                         "type": "string",
-                        "description": "role name",
-                        "name": "role_name",
+                        "description": "db type of rule",
+                        "name": "db_type",
                         "in": "path",
                         "required": true
                     }
@@ -5695,7 +4732,7 @@ var doc = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
+                            "$ref": "#/definitions/v1.GetRuleKnowledgeResV1"
                         }
                     }
                 }
@@ -5706,33 +4743,119 @@ var doc = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "update role",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
+                "description": "update custom rule knowledge",
                 "tags": [
-                    "role"
+                    "rule_template"
                 ],
-                "summary": "更新角色信息",
-                "operationId": "updateRoleV1",
+                "summary": "更新自定义规则知识库",
+                "operationId": "updateCustomRuleKnowledge",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "role name",
-                        "name": "role_name",
+                        "description": "rule name",
+                        "name": "rule_name",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "update role request",
-                        "name": "instance",
+                        "type": "string",
+                        "description": "db type of rule",
+                        "name": "db_type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "update rule knowledge",
+                        "name": "req",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1.UpdateRoleReqV1"
+                            "$ref": "#/definitions/v1.UpdateRuleKnowledgeReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.BaseRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/rule_knowledge/db_types/{db_type}/rules/{rule_name}/": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "get rule knowledge",
+                "tags": [
+                    "rule_template"
+                ],
+                "summary": "查看规则知识库",
+                "operationId": "getRuleKnowledgeV1",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "rule name",
+                        "name": "rule_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "db type of rule",
+                        "name": "db_type",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.GetRuleKnowledgeResV1"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "update rule knowledge",
+                "tags": [
+                    "rule_template"
+                ],
+                "summary": "更新规则知识库",
+                "operationId": "updateRuleKnowledge",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "rule name",
+                        "name": "rule_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "db type of rule",
+                        "name": "db_type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "update rule knowledge",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.UpdateRuleKnowledgeReq"
                         }
                     }
                 ],
@@ -5906,6 +5029,12 @@ var doc = `{
                         "name": "rule_template_name",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "fuzzy rule,keyword for desc and annotation",
+                        "name": "fuzzy_keyword_rule",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -6085,6 +5214,12 @@ var doc = `{
                     },
                     {
                         "type": "string",
+                        "description": "fuzzy rule,keyword for desc and annotation",
+                        "name": "fuzzy_keyword_rule",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "filter global rule template name",
                         "name": "filter_global_rule_template_name",
                         "in": "query"
@@ -6170,6 +5305,7 @@ var doc = `{
                 ],
                 "summary": "直接审核SQL",
                 "operationId": "directAuditV1",
+                "deprecated": true,
                 "parameters": [
                     {
                         "description": "sqls that should be audited",
@@ -6186,32 +5322,6 @@ var doc = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v1.DirectAuditResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/static/logo": {
-            "get": {
-                "description": "get logo",
-                "tags": [
-                    "configuration"
-                ],
-                "summary": "获取logo",
-                "operationId": "getLogo",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "timestamp",
-                        "name": "timestamp",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "get logo",
-                        "schema": {
-                            "type": "file"
                         }
                     }
                 }
@@ -6594,220 +5704,6 @@ var doc = `{
                 }
             }
         },
-        "/v1/sync_instances": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get sync instance task list",
-                "tags": [
-                    "sync_instance"
-                ],
-                "summary": "获取同步实例任务列表",
-                "operationId": "GetSyncInstanceTaskList",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetSyncInstanceTaskListResV1"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "create sync instance task",
-                "consumes": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sync_instance"
-                ],
-                "summary": "创建同步实例任务",
-                "operationId": "createSyncInstanceTaskV1",
-                "parameters": [
-                    {
-                        "description": "create sync instance task request",
-                        "name": "sync_task",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.CreateSyncInstanceTaskReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/sync_instances/source_tips": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get sync task tips",
-                "tags": [
-                    "sync_instance"
-                ],
-                "summary": "获取同步任务提示",
-                "operationId": "GetSyncTaskSourceTips",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetSyncTaskSourceTipsResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/sync_instances/{task_id}/": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get sync task detail",
-                "tags": [
-                    "sync_instance"
-                ],
-                "summary": "获取同步任务详情",
-                "operationId": "GetSyncInstanceTask",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "sync task id",
-                        "name": "task_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetSyncInstanceTaskResV1"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "delete sync instance task",
-                "tags": [
-                    "sync_instance"
-                ],
-                "summary": "删除同步实例任务",
-                "operationId": "deleteSyncInstanceTaskV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "sync task id",
-                        "name": "task_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update sync instance task",
-                "tags": [
-                    "sync_instance"
-                ],
-                "summary": "更新同步实例任务",
-                "operationId": "updateSyncInstanceTaskV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "sync task id",
-                        "name": "task_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "update sync instance request",
-                        "name": "sync_task",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UpdateSyncInstanceTaskReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/sync_instances/{task_id}/trigger": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "trigger sync instance",
-                "tags": [
-                    "sync_instance"
-                ],
-                "summary": "触发同步实例",
-                "operationId": "triggerSyncInstanceV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "sync task id",
-                        "name": "task_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.TriggerSyncInstanceResV1"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/task_groups/audit": {
             "post": {
                 "security": [
@@ -6815,7 +5711,7 @@ var doc = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "audit task group.\n1. formData[sql]: sql content;\n2. file[input_sql_file]: it is a sql file;\n3. file[input_mybatis_xml_file]: it is mybatis xml file, sql will be parsed from it.",
+                "description": "audit task group.\n1. formData[sql]: sql content;\n2. file[input_sql_file]: it is a sql file;\n3. file[input_mybatis_xml_file]: it is mybatis xml file, sql will be parsed from it.\n4. file[input_zip_file]: it is zip file, sql will be parsed from it.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -6851,6 +5747,12 @@ var doc = `{
                         "type": "file",
                         "description": "input mybatis XML file",
                         "name": "input_mybatis_xml_file",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "input ZIP file",
+                        "name": "input_zip_file",
                         "in": "formData"
                     }
                 ],
@@ -7176,295 +6078,6 @@ var doc = `{
                 }
             }
         },
-        "/v1/user": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get current user info",
-                "tags": [
-                    "user"
-                ],
-                "summary": "获取当前用户信息",
-                "operationId": "getCurrentUserV1",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetUserDetailResV1"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update current user",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "更新个人信息",
-                "operationId": "updateCurrentUserV1",
-                "parameters": [
-                    {
-                        "description": "update user",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UpdateCurrentUserReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/user/password": {
-            "put": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update current user's password",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "用户修改密码",
-                "operationId": "UpdateCurrentUserPasswordV1",
-                "parameters": [
-                    {
-                        "description": "update user's password",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UpdateCurrentUserPasswordReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/user_group_tips": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get user group tip list",
-                "tags": [
-                    "user_group"
-                ],
-                "summary": "获取用户组提示列表",
-                "operationId": "getUserGroupTipListV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "filter_project",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetUserGroupTipsResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/user_groups": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get user group info list",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user_group"
-                ],
-                "summary": "获取用户组列表",
-                "operationId": "getUserGroupListV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "filter user group name",
-                        "name": "filter_user_group_name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "page index",
-                        "name": "page_index",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "size of per page",
-                        "name": "page_size",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetUserGroupsResV1"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "create user group",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user_group"
-                ],
-                "summary": "创建用户组",
-                "operationId": "CreateUserGroupV1",
-                "parameters": [
-                    {
-                        "description": "create user group",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.CreateUserGroupReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/user_groups/{user_group_name}/": {
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "delete user group",
-                "tags": [
-                    "user_group"
-                ],
-                "summary": "删除用户组",
-                "operationId": "deleteUserGroupV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "user_group_name",
-                        "name": "user_group_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update user group",
-                "tags": [
-                    "user_group"
-                ],
-                "summary": "更新用户组",
-                "operationId": "updateUserGroupV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "user_group_name",
-                        "name": "user_group_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "update user group",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.PatchUserGroupReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/user_tips": {
             "get": {
                 "security": [
@@ -7483,7 +6096,8 @@ var doc = `{
                         "type": "string",
                         "description": "project name",
                         "name": "filter_project",
-                        "in": "query"
+                        "in": "query",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -7491,243 +6105,6 @@ var doc = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v1.GetUserTipsResV1"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/users": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get user info list",
-                "tags": [
-                    "user"
-                ],
-                "summary": "获取用户信息列表",
-                "operationId": "getUserListV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "filter user name",
-                        "name": "filter_user_name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "page index",
-                        "name": "page_index",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "size of per page",
-                        "name": "page_size",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetUsersResV1"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "create user",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "创建用户",
-                "operationId": "createUserV1",
-                "parameters": [
-                    {
-                        "description": "create user",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.CreateUserReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/users/{user_name}/": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get user info",
-                "tags": [
-                    "user"
-                ],
-                "summary": "获取用户信息",
-                "operationId": "getUserV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "user name",
-                        "name": "user_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.GetUserDetailResV1"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "delete user",
-                "tags": [
-                    "user"
-                ],
-                "summary": "删除用户",
-                "operationId": "deleteUserV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "user name",
-                        "name": "user_name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "update user",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "更新用户信息",
-                "operationId": "updateUserV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "user name",
-                        "name": "user_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "update user",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UpdateUserReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/users/{user_name}/password": {
-            "patch": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "admin modifies the passwords of other users",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "admin修改其他用户密码",
-                "operationId": "UpdateOtherUserPasswordV1",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "user name",
-                        "name": "user_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "change user's password",
-                        "name": "instance",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UpdateOtherUserPasswordReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
                         }
                     }
                 }
@@ -7779,8 +6156,8 @@ var doc = `{
                     },
                     {
                         "type": "string",
-                        "description": "filter create user name",
-                        "name": "filter_create_user_name",
+                        "description": "filter create user id",
+                        "name": "filter_create_user_id",
                         "in": "query"
                     },
                     {
@@ -7800,13 +6177,13 @@ var doc = `{
                     },
                     {
                         "type": "string",
-                        "description": "filter current step assignee user name",
-                        "name": "filter_current_step_assignee_user_name",
+                        "description": "filter current step assignee user id",
+                        "name": "filter_current_step_assignee_user_id",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "filter instance name",
+                        "description": "filter instance id",
                         "name": "filter_task_instance_name",
                         "in": "query"
                     },
@@ -7835,6 +6212,40 @@ var doc = `{
                 }
             }
         },
+        "/v2/audit_files": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Direct audit sql from SQL files and MyBatis files",
+                "tags": [
+                    "sql_audit"
+                ],
+                "summary": "直接从文件内容提取SQL并审核，SQL文件暂时只支持一次解析一个文件",
+                "operationId": "directAuditFilesV2",
+                "parameters": [
+                    {
+                        "description": "files that should be audited",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.DirectAuditFileReqV2"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.DirectAuditResV2"
+                        }
+                    }
+                }
+            }
+        },
         "/v2/configurations/drivers": {
             "get": {
                 "security": [
@@ -7853,35 +6264,6 @@ var doc = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.GetDriversRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/v2/login": {
-            "post": {
-                "description": "user login",
-                "tags": [
-                    "user"
-                ],
-                "summary": "用户登录",
-                "operationId": "loginV2",
-                "parameters": [
-                    {
-                        "description": "user login request",
-                        "name": "user",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.UserLoginReqV1"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/controller.BaseRes"
                         }
                     }
                 }
@@ -8070,102 +6452,19 @@ var doc = `{
                 }
             }
         },
-        "/v2/projects/{project_name}/instances": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "get instance info list",
-                "tags": [
-                    "instance"
-                ],
-                "summary": "获取实例信息列表",
-                "operationId": "getInstanceListV2",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "project name",
-                        "name": "project_name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter instance name",
-                        "name": "filter_instance_name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter db type",
-                        "name": "filter_db_type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter db host",
-                        "name": "filter_db_host",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter db port",
-                        "name": "filter_db_port",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter db user",
-                        "name": "filter_db_user",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "filter rule template name",
-                        "name": "filter_rule_template_name",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "page index",
-                        "name": "page_index",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "size of per page",
-                        "name": "page_size",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v2.GetInstancesResV2"
-                        }
-                    }
-                }
-            },
+        "/v2/projects/{project_name}/audit_plans/{audit_plan_name}/sqls/full": {
             "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "create a instance",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "full sync audit plan SQLs",
                 "tags": [
-                    "instance"
+                    "audit_plan"
                 ],
-                "summary": "添加实例",
-                "operationId": "createInstanceV2",
+                "summary": "全量同步SQL到扫描任务",
+                "operationId": "fullSyncAuditPlanSQLsV2",
                 "parameters": [
                     {
                         "type": "string",
@@ -8175,12 +6474,67 @@ var doc = `{
                         "required": true
                     },
                     {
-                        "description": "add instance",
-                        "name": "instance",
+                        "type": "string",
+                        "description": "audit plan name",
+                        "name": "audit_plan_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "full sync audit plan SQLs request",
+                        "name": "sqls",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.CreateInstanceReqV2"
+                            "$ref": "#/definitions/v2.FullSyncAuditPlanSQLsReqV2"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.BaseRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/projects/{project_name}/audit_plans/{audit_plan_name}/sqls/partial": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "partial sync audit plan SQLs",
+                "tags": [
+                    "audit_plan"
+                ],
+                "summary": "增量同步SQL到扫描任务",
+                "operationId": "partialSyncAuditPlanSQLsV2",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "project name",
+                        "name": "project_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "audit plan name",
+                        "name": "audit_plan_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "partial sync audit plan SQLs request",
+                        "name": "sqls",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.PartialSyncAuditPlanSQLsReqV2"
                         }
                     }
                 ],
@@ -8228,6 +6582,161 @@ var doc = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.GetInstanceResV2"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/projects/{project_name}/sql_manages": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "get sql manage list",
+                "tags": [
+                    "SqlManage"
+                ],
+                "summary": "获取管控sql列表",
+                "operationId": "GetSqlManageListV2",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "project name",
+                        "name": "project_name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "fuzzy search sql fingerprint",
+                        "name": "fuzzy_search_sql_fingerprint",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "assignee",
+                        "name": "filter_assignee",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "instance name",
+                        "name": "filter_instance_name",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "audit_plan",
+                            "sql_audit_record"
+                        ],
+                        "type": "string",
+                        "description": "source",
+                        "name": "filter_source",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "normal",
+                            "notice",
+                            "warn",
+                            "error"
+                        ],
+                        "type": "string",
+                        "description": "audit level",
+                        "name": "filter_audit_level",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "last audit start time from",
+                        "name": "filter_last_audit_start_time_from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "last audit start time to",
+                        "name": "filter_last_audit_start_time_to",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "unhandled",
+                            "solved",
+                            "ignored",
+                            "manual_audited"
+                        ],
+                        "type": "string",
+                        "description": "status",
+                        "name": "filter_status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "rule name",
+                        "name": "filter_rule_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "db type",
+                        "name": "filter_db_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "fuzzy search endpoint",
+                        "name": "fuzzy_search_endpoint",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "fuzzy search schema name",
+                        "name": "fuzzy_search_schema_name",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "first_appear_timestamp",
+                            "last_receive_timestamp",
+                            "fp_count"
+                        ],
+                        "type": "string",
+                        "description": "sort field",
+                        "name": "sort_field",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "sort order",
+                        "name": "sort_order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "page index",
+                        "name": "page_index",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "size of per page",
+                        "name": "page_size",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.GetSqlManageListResp"
                         }
                     }
                 }
@@ -8791,6 +7300,7 @@ var doc = `{
                 ],
                 "summary": "直接审核SQL",
                 "operationId": "directAuditV2",
+                "deprecated": true,
                 "parameters": [
                     {
                         "description": "sqls that should be audited",
@@ -8954,6 +7464,17 @@ var doc = `{
                 "message": {
                     "type": "string",
                     "example": "ok"
+                }
+            }
+        },
+        "v1.AffectRows": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "err_message": {
+                    "type": "string"
                 }
             }
         },
@@ -9146,6 +7667,26 @@ var doc = `{
                 "audit_plan_sql_schema": {
                     "type": "string",
                     "example": "db1"
+                },
+                "db_user": {
+                    "type": "string",
+                    "example": "database_user001"
+                },
+                "endpoint": {
+                    "type": "string",
+                    "example": "10.186.1.2"
+                },
+                "first_query_at": {
+                    "type": "string",
+                    "example": "2023-09-12T02:48:01.317880Z"
+                },
+                "query_time_avg": {
+                    "type": "number",
+                    "example": 3.22
+                },
+                "query_time_max": {
+                    "type": "number",
+                    "example": 5.22
                 }
             }
         },
@@ -9214,6 +7755,22 @@ var doc = `{
                     "items": {
                         "$ref": "#/definitions/v1.AuditSQLResV1"
                     }
+                }
+            }
+        },
+        "v1.AuditResult": {
+            "type": "object",
+            "properties": {
+                "level": {
+                    "type": "string",
+                    "example": "warn"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "避免使用不必要的内置函数md5()"
+                },
+                "rule_name": {
+                    "type": "string"
                 }
             }
         },
@@ -9454,56 +8011,31 @@ var doc = `{
                 }
             }
         },
-        "v1.BindOauth2UserReqV1": {
+        "v1.BatchUpdateSqlManageReq": {
             "type": "object",
             "properties": {
-                "oauth2_token": {
-                    "type": "string"
-                },
-                "pwd": {
-                    "type": "string"
-                },
-                "user_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.BindOauth2UserResDataV1": {
-            "type": "object",
-            "properties": {
-                "token": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.BindOauth2UserResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.BindOauth2UserResDataV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.BindRoleReqV1": {
-            "type": "object",
-            "properties": {
-                "instance_name": {
-                    "type": "string"
-                },
-                "role_names": {
+                "assignees": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "remark": {
+                    "type": "string"
+                },
+                "sql_manage_id_list": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "solved",
+                        "ignored",
+                        "manual_audited"
+                    ]
                 }
             }
         },
@@ -9535,12 +8067,6 @@ var doc = `{
                 "desc": {
                     "type": "string"
                 },
-                "instance_name_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "new_rule_template_name": {
                     "type": "string"
                 }
@@ -9553,6 +8079,14 @@ var doc = `{
                     "type": "string"
                 },
                 "new_rule_template_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "v1.CompanyNotice": {
+            "type": "object",
+            "properties": {
+                "notice_str": {
                     "type": "string"
                 }
             }
@@ -9679,100 +8213,6 @@ var doc = `{
                 }
             }
         },
-        "v1.CreateInstanceReqV1": {
-            "type": "object",
-            "properties": {
-                "additional_params": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.InstanceAdditionalParamReqV1"
-                    }
-                },
-                "db_host": {
-                    "type": "string",
-                    "example": "10.10.10.10"
-                },
-                "db_password": {
-                    "type": "string",
-                    "example": "123456"
-                },
-                "db_port": {
-                    "type": "string",
-                    "example": "3306"
-                },
-                "db_type": {
-                    "type": "string",
-                    "example": "mysql"
-                },
-                "db_user": {
-                    "type": "string",
-                    "example": "root"
-                },
-                "desc": {
-                    "type": "string",
-                    "example": "this is a test instance"
-                },
-                "instance_name": {
-                    "type": "string",
-                    "example": "test"
-                },
-                "maintenance_times": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.MaintenanceTimeReqV1"
-                    }
-                },
-                "rule_template_name": {
-                    "type": "string"
-                },
-                "sql_query_config": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.SQLQueryConfigReqV1"
-                }
-            }
-        },
-        "v1.CreateMemberGroupReqV1": {
-            "type": "object",
-            "properties": {
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.BindRoleReqV1"
-                    }
-                },
-                "user_group_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.CreateMemberReqV1": {
-            "type": "object",
-            "properties": {
-                "is_manager": {
-                    "type": "boolean"
-                },
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.BindRoleReqV1"
-                    }
-                },
-                "user_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.CreateProjectReqV1": {
-            "type": "object",
-            "properties": {
-                "desc": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
         "v1.CreateProjectRuleTemplateReqV1": {
             "type": "object",
             "properties": {
@@ -9782,12 +8222,6 @@ var doc = `{
                 "desc": {
                     "type": "string"
                 },
-                "instance_name_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "rule_list": {
                     "type": "array",
                     "items": {
@@ -9795,23 +8229,6 @@ var doc = `{
                     }
                 },
                 "rule_template_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.CreateRoleReqV1": {
-            "type": "object",
-            "properties": {
-                "operation_code_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "role_desc": {
-                    "type": "string"
-                },
-                "role_name": {
                     "type": "string"
                 }
             }
@@ -9836,96 +8253,20 @@ var doc = `{
                 }
             }
         },
-        "v1.CreateSyncInstanceTaskReqV1": {
-            "type": "object",
-            "required": [
-                "db_type",
-                "global_rule_template",
-                "source",
-                "sync_instance_interval",
-                "url",
-                "version"
-            ],
-            "properties": {
-                "db_type": {
-                    "type": "string",
-                    "example": "mysql"
-                },
-                "global_rule_template": {
-                    "type": "string",
-                    "example": "default_mysql"
-                },
-                "source": {
-                    "type": "string",
-                    "example": "actiontech-dmp"
-                },
-                "sync_instance_interval": {
-                    "type": "string",
-                    "example": "0 0 * * *"
-                },
-                "url": {
-                    "type": "string",
-                    "example": "http://10.186.62.56:10000"
-                },
-                "version": {
-                    "type": "string",
-                    "example": "5.23.01.0"
-                }
-            }
-        },
-        "v1.CreateUserGroupReqV1": {
+        "v1.CreateSQLAuditRecordResV1": {
             "type": "object",
             "properties": {
-                "user_group_desc": {
+                "code": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "data": {
+                    "type": "object",
+                    "$ref": "#/definitions/v1.SQLAuditRecordResData"
+                },
+                "message": {
                     "type": "string",
-                    "example": "this is a group"
-                },
-                "user_group_name": {
-                    "type": "string",
-                    "example": "test"
-                },
-                "user_name_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "v1.CreateUserReqV1": {
-            "type": "object",
-            "properties": {
-                "email": {
-                    "type": "string",
-                    "example": "test@email.com"
-                },
-                "management_permission_code_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "phone": {
-                    "type": "string",
-                    "example": "18962136666"
-                },
-                "user_group_name_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "user_name": {
-                    "type": "string",
-                    "example": "test"
-                },
-                "user_password": {
-                    "type": "string",
-                    "example": "123456"
-                },
-                "wechat_id": {
-                    "type": "string",
-                    "example": "UserID"
+                    "example": "ok"
                 }
             }
         },
@@ -10017,18 +8358,6 @@ var doc = `{
                 }
             }
         },
-        "v1.DashboardProjectTipV1": {
-            "type": "object",
-            "properties": {
-                "project_name": {
-                    "type": "string"
-                },
-                "unfinished_workflow_count": {
-                    "description": "只统计与当前用户相关的未完成工单",
-                    "type": "integer"
-                }
-            }
-        },
         "v1.DashboardResV1": {
             "type": "object",
             "properties": {
@@ -10049,12 +8378,64 @@ var doc = `{
                 }
             }
         },
-        "v1.DirectAuditReqV1": {
+        "v1.DirectAuditFileReqV1": {
             "type": "object",
             "properties": {
+                "file_contents": {
+                    "description": "调用方不应该关心SQL是否被完美的拆分成独立的条目, 拆分SQL由SQLE实现\n每个数组元素是一个文件内容",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "select * from t1; select * from t2;"
+                    ]
+                },
+                "instance_name": {
+                    "type": "string",
+                    "example": "instance1"
+                },
                 "instance_type": {
                     "type": "string",
                     "example": "MySQL"
+                },
+                "project_name": {
+                    "type": "string",
+                    "example": "project1"
+                },
+                "schema_name": {
+                    "type": "string",
+                    "example": "schema1"
+                },
+                "sql_type": {
+                    "type": "string",
+                    "enum": [
+                        "sql",
+                        "mybatis",
+                        ""
+                    ],
+                    "example": "sql"
+                }
+            }
+        },
+        "v1.DirectAuditReqV1": {
+            "type": "object",
+            "properties": {
+                "instance_name": {
+                    "type": "string",
+                    "example": "instance1"
+                },
+                "instance_type": {
+                    "type": "string",
+                    "example": "MySQL"
+                },
+                "project_name": {
+                    "type": "string",
+                    "example": "project1"
+                },
+                "schema_name": {
+                    "type": "string",
+                    "example": "schema1"
                 },
                 "sql_content": {
                     "description": "调用方不应该关心SQL是否被完美的拆分成独立的条目, 拆分SQL由SQLE实现",
@@ -10454,6 +8835,23 @@ var doc = `{
                 }
             }
         },
+        "v1.GetCompanyNoticeResp": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "data": {
+                    "type": "object",
+                    "$ref": "#/definitions/v1.CompanyNotice"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
         "v1.GetCustomRuleResV1": {
             "type": "object",
             "properties": {
@@ -10482,25 +8880,6 @@ var doc = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/v1.CustomRuleResV1"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetDashboardProjectTipsResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.DashboardProjectTipV1"
                     }
                 },
                 "message": {
@@ -10560,7 +8939,7 @@ var doc = `{
                 }
             }
         },
-        "v1.GetFeishuConfigurationResV1": {
+        "v1.GetFeishuAuditConfigurationResV1": {
             "type": "object",
             "properties": {
                 "code": {
@@ -10574,56 +8953,6 @@ var doc = `{
                 "message": {
                     "type": "string",
                     "example": "ok"
-                }
-            }
-        },
-        "v1.GetInstanceAdditionalMetasResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.InstanceAdditionalMetaV1"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetInstanceConnectableReqV1": {
-            "type": "object",
-            "properties": {
-                "additional_params": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.InstanceAdditionalParamReqV1"
-                    }
-                },
-                "db_type": {
-                    "type": "string",
-                    "example": "mysql"
-                },
-                "host": {
-                    "type": "string",
-                    "example": "10.10.10.10"
-                },
-                "password": {
-                    "type": "string",
-                    "example": "123456"
-                },
-                "port": {
-                    "type": "string",
-                    "example": "3306"
-                },
-                "user": {
-                    "type": "string",
-                    "example": "root"
                 }
             }
         },
@@ -10656,23 +8985,6 @@ var doc = `{
                     "items": {
                         "$ref": "#/definitions/v1.DBTypeHealth"
                     }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetInstanceResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.InstanceResV1"
                 },
                 "message": {
                     "type": "string",
@@ -10716,28 +9028,6 @@ var doc = `{
                 }
             }
         },
-        "v1.GetInstancesResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.InstanceResV1"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                },
-                "total_nums": {
-                    "type": "integer"
-                }
-            }
-        },
         "v1.GetInstancesTypePercentResV1": {
             "type": "object",
             "properties": {
@@ -10748,23 +9038,6 @@ var doc = `{
                 "data": {
                     "type": "object",
                     "$ref": "#/definitions/v1.InstancesTypePercentV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetLDAPConfigurationResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.LDAPConfigurationResV1"
                 },
                 "message": {
                     "type": "string",
@@ -10804,242 +9077,6 @@ var doc = `{
                 "data": {
                     "type": "object",
                     "$ref": "#/definitions/v1.LicenseUsageV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetManagementPermissionsResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.ManagementPermissionResV1"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetMemberGroupRespDataV1": {
-            "type": "object",
-            "properties": {
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.BindRoleReqV1"
-                    }
-                },
-                "user_group_name": {
-                    "type": "string"
-                },
-                "users": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.MemberGroupUserItem"
-                    }
-                }
-            }
-        },
-        "v1.GetMemberGroupRespV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.GetMemberGroupRespDataV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetMemberGroupsRespV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.GetMemberGroupRespDataV1"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                },
-                "total_nums": {
-                    "type": "integer"
-                }
-            }
-        },
-        "v1.GetMemberRespDataV1": {
-            "type": "object",
-            "properties": {
-                "is_manager": {
-                    "type": "boolean"
-                },
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.BindRoleReqV1"
-                    }
-                },
-                "user_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.GetMemberRespV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.GetMemberRespDataV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetMemberTipsResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.MemberTipResV1"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetMembersRespV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.GetMemberRespDataV1"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                },
-                "total_nums": {
-                    "type": "integer"
-                }
-            }
-        },
-        "v1.GetOauth2ConfigurationResDataV1": {
-            "type": "object",
-            "properties": {
-                "access_token_tag": {
-                    "type": "string"
-                },
-                "client_host": {
-                    "type": "string"
-                },
-                "client_id": {
-                    "type": "string"
-                },
-                "enable_oauth2": {
-                    "type": "boolean"
-                },
-                "login_tip": {
-                    "type": "string"
-                },
-                "scopes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "server_auth_url": {
-                    "type": "string"
-                },
-                "server_token_url": {
-                    "type": "string"
-                },
-                "server_user_id_url": {
-                    "type": "string"
-                },
-                "user_id_tag": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.GetOauth2ConfigurationResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.GetOauth2ConfigurationResDataV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetOauth2TipsResDataV1": {
-            "type": "object",
-            "properties": {
-                "enable_oauth2": {
-                    "type": "boolean"
-                },
-                "login_tip": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.GetOauth2TipsResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.GetOauth2TipsResDataV1"
                 },
                 "message": {
                     "type": "string",
@@ -11123,45 +9160,6 @@ var doc = `{
                 "message": {
                     "type": "string",
                     "example": "ok"
-                }
-            }
-        },
-        "v1.GetProjectDetailResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.ProjectDetailItem"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetProjectResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.ProjectListItem"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                },
-                "total_nums": {
-                    "type": "integer"
                 }
             }
         },
@@ -11261,25 +9259,6 @@ var doc = `{
                 }
             }
         },
-        "v1.GetProjectTipsResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.ProjectTipResV1"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
         "v1.GetRiskAuditPlanResV1": {
             "type": "object",
             "properties": {
@@ -11291,25 +9270,6 @@ var doc = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/v1.RiskAuditPlan"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetRoleTipsResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.RoleTipResV1"
                     }
                 },
                 "message": {
@@ -11337,7 +9297,7 @@ var doc = `{
                 }
             }
         },
-        "v1.GetRolesResV1": {
+        "v1.GetRuleKnowledgeResV1": {
             "type": "object",
             "properties": {
                 "code": {
@@ -11345,17 +9305,12 @@ var doc = `{
                     "example": 0
                 },
                 "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.RoleResV1"
-                    }
+                    "type": "object",
+                    "$ref": "#/definitions/v1.RuleKnowledgeResV1"
                 },
                 "message": {
                     "type": "string",
                     "example": "ok"
-                },
-                "total_nums": {
-                    "type": "integer"
                 }
             }
         },
@@ -11455,23 +9410,6 @@ var doc = `{
                 }
             }
         },
-        "v1.GetSMTPConfigurationResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.SMTPConfigurationResV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
         "v1.GetSQLAnalysisDataResItemV1": {
             "type": "object",
             "properties": {
@@ -11487,21 +9425,7 @@ var doc = `{
                 }
             }
         },
-        "v1.GetSQLEInfoResDataV1": {
-            "type": "object",
-            "properties": {
-                "logo_url": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "version": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.GetSQLEInfoResV1": {
+        "v1.GetSQLAuditRecordResV1": {
             "type": "object",
             "properties": {
                 "code": {
@@ -11510,7 +9434,7 @@ var doc = `{
                 },
                 "data": {
                     "type": "object",
-                    "$ref": "#/definitions/v1.GetSQLEInfoResDataV1"
+                    "$ref": "#/definitions/v1.SQLAuditRecord"
                 },
                 "message": {
                     "type": "string",
@@ -11518,18 +9442,7 @@ var doc = `{
                 }
             }
         },
-        "v1.GetSQLQueryConfigurationResDataV1": {
-            "type": "object",
-            "properties": {
-                "enable_sql_query": {
-                    "type": "boolean"
-                },
-                "sql_query_root_uri": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.GetSQLQueryConfigurationResV1": {
+        "v1.GetSQLAuditRecordTagTipsResV1": {
             "type": "object",
             "properties": {
                 "code": {
@@ -11537,12 +9450,36 @@ var doc = `{
                     "example": 0
                 },
                 "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.GetSQLQueryConfigurationResDataV1"
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "message": {
                     "type": "string",
                     "example": "ok"
+                }
+            }
+        },
+        "v1.GetSQLAuditRecordsResV1": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.SQLAuditRecord"
+                    }
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                },
+                "total_nums": {
+                    "type": "integer"
                 }
             }
         },
@@ -11584,7 +9521,7 @@ var doc = `{
                 }
             }
         },
-        "v1.GetSyncInstanceTaskListResV1": {
+        "v1.GetSqlManageListResp": {
             "type": "object",
             "properties": {
                 "code": {
@@ -11594,7 +9531,35 @@ var doc = `{
                 "data": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/v1.InstanceTaskResV1"
+                        "$ref": "#/definitions/v1.SqlManage"
+                    }
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                },
+                "sql_manage_bad_num": {
+                    "type": "integer"
+                },
+                "sql_manage_optimized_num": {
+                    "type": "integer"
+                },
+                "sql_manage_total_num": {
+                    "type": "integer"
+                }
+            }
+        },
+        "v1.GetSqlManageRuleTipsResp": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.RuleTips"
                     }
                 },
                 "message": {
@@ -11603,7 +9568,7 @@ var doc = `{
                 }
             }
         },
-        "v1.GetSyncInstanceTaskResV1": {
+        "v1.GetSqlManageSqlAnalysisResp": {
             "type": "object",
             "properties": {
                 "code": {
@@ -11611,27 +9576,9 @@ var doc = `{
                     "example": 0
                 },
                 "data": {
+                    "description": "V1版本不能引用V2版本的结构体,所以只能复制一份",
                     "type": "object",
-                    "$ref": "#/definitions/v1.InstanceTaskDetailResV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetSyncTaskSourceTipsResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.SyncTaskTipsResV1"
-                    }
+                    "$ref": "#/definitions/v1.SqlAnalysis"
                 },
                 "message": {
                     "type": "string",
@@ -11705,81 +9652,6 @@ var doc = `{
                 }
             }
         },
-        "v1.GetUserDetailResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.UserDetailResV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetUserGroupTipsResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.UserGroupTipListItem"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetUserGroupsResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.UserGroupListItemResV1"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                },
-                "total_nums": {
-                    "type": "integer"
-                }
-            }
-        },
-        "v1.GetUserLoginResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.UserLoginResV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
         "v1.GetUserTipsResV1": {
             "type": "object",
             "properties": {
@@ -11792,45 +9664,6 @@ var doc = `{
                     "items": {
                         "$ref": "#/definitions/v1.UserTipResV1"
                     }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.GetUsersResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.UserResV1"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                },
-                "total_nums": {
-                    "type": "integer"
-                }
-            }
-        },
-        "v1.GetWeChatConfigurationResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.WeChatConfigurationResV1"
                 },
                 "message": {
                     "type": "string",
@@ -12118,23 +9951,6 @@ var doc = `{
                 }
             }
         },
-        "v1.GetWorkflowWebHookConfigResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.WebHookConfigV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
         "v1.GetWorkflowsResV1": {
             "type": "object",
             "properties": {
@@ -12154,42 +9970,6 @@ var doc = `{
                 },
                 "total_nums": {
                     "type": "integer"
-                }
-            }
-        },
-        "v1.GlobalRuleTemplateInstance": {
-            "type": "object",
-            "properties": {
-                "instance_name": {
-                    "type": "string"
-                },
-                "project_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.InstanceAdditionalMetaV1": {
-            "type": "object",
-            "properties": {
-                "db_type": {
-                    "type": "string"
-                },
-                "params": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.InstanceAdditionalParamResV1"
-                    }
-                }
-            }
-        },
-        "v1.InstanceAdditionalParamReqV1": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string"
-                },
-                "value": {
-                    "type": "string"
                 }
             }
         },
@@ -12258,57 +10038,6 @@ var doc = `{
                 }
             }
         },
-        "v1.InstanceResV1": {
-            "type": "object",
-            "properties": {
-                "additional_params": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.InstanceAdditionalParamResV1"
-                    }
-                },
-                "db_host": {
-                    "type": "string",
-                    "example": "10.10.10.10"
-                },
-                "db_port": {
-                    "type": "string",
-                    "example": "3306"
-                },
-                "db_type": {
-                    "type": "string",
-                    "example": "mysql"
-                },
-                "db_user": {
-                    "type": "string",
-                    "example": "root"
-                },
-                "desc": {
-                    "type": "string",
-                    "example": "this is a instance"
-                },
-                "instance_name": {
-                    "type": "string"
-                },
-                "maintenance_times": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.MaintenanceTimeResV1"
-                    }
-                },
-                "rule_template_name": {
-                    "type": "string"
-                },
-                "source": {
-                    "type": "string",
-                    "example": "SQLE"
-                },
-                "sql_query_config": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.SQLQueryConfigResV1"
-                }
-            }
-        },
         "v1.InstanceSchemaResV1": {
             "type": "object",
             "properties": {
@@ -12342,80 +10071,13 @@ var doc = `{
                 }
             }
         },
-        "v1.InstanceTaskDetailResV1": {
-            "type": "object",
-            "properties": {
-                "db_type": {
-                    "type": "string",
-                    "example": "mysql"
-                },
-                "id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "rule_template": {
-                    "type": "string",
-                    "example": "default_mysql"
-                },
-                "source": {
-                    "type": "string",
-                    "example": "actiontech-dmp"
-                },
-                "sync_instance_interval": {
-                    "type": "string",
-                    "example": "0 0 * * *"
-                },
-                "url": {
-                    "type": "string",
-                    "example": "http://10.186.62.56:10000"
-                },
-                "version": {
-                    "type": "string",
-                    "example": "1.23.1"
-                }
-            }
-        },
-        "v1.InstanceTaskResV1": {
-            "type": "object",
-            "properties": {
-                "db_type": {
-                    "type": "string",
-                    "example": "mysql"
-                },
-                "id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "last_sync_status": {
-                    "type": "string",
-                    "enum": [
-                        "succeeded",
-                        "failed"
-                    ],
-                    "example": "succeeded"
-                },
-                "last_sync_success_time": {
-                    "type": "string",
-                    "example": "2021-08-12 12:00:00"
-                },
-                "source": {
-                    "type": "string",
-                    "example": "actiontech-dmp"
-                },
-                "url": {
-                    "type": "string",
-                    "example": "http://10.186.62.56:10000"
-                },
-                "version": {
-                    "type": "string",
-                    "example": "1.23.1"
-                }
-            }
-        },
         "v1.InstanceTipResV1": {
             "type": "object",
             "properties": {
                 "host": {
+                    "type": "string"
+                },
+                "instance_id": {
                     "type": "string"
                 },
                 "instance_name": {
@@ -12457,67 +10119,6 @@ var doc = `{
                     "items": {
                         "$ref": "#/definitions/v1.InstanceTypePercent"
                     }
-                }
-            }
-        },
-        "v1.LDAPConfigurationReqV1": {
-            "type": "object",
-            "properties": {
-                "enable_ldap": {
-                    "type": "boolean"
-                },
-                "enable_ssl": {
-                    "type": "boolean"
-                },
-                "ldap_connect_dn": {
-                    "type": "string"
-                },
-                "ldap_connect_pwd": {
-                    "type": "string"
-                },
-                "ldap_search_base_dn": {
-                    "type": "string"
-                },
-                "ldap_server_host": {
-                    "type": "string"
-                },
-                "ldap_server_port": {
-                    "type": "string"
-                },
-                "ldap_user_email_rdn_key": {
-                    "type": "string"
-                },
-                "ldap_user_name_rdn_key": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.LDAPConfigurationResV1": {
-            "type": "object",
-            "properties": {
-                "enable_ldap": {
-                    "type": "boolean"
-                },
-                "enable_ssl": {
-                    "type": "boolean"
-                },
-                "ldap_connect_dn": {
-                    "type": "string"
-                },
-                "ldap_search_base_dn": {
-                    "type": "string"
-                },
-                "ldap_server_host": {
-                    "type": "string"
-                },
-                "ldap_server_port": {
-                    "type": "string"
-                },
-                "ldap_user_email_rdn_key": {
-                    "type": "string"
-                },
-                "ldap_user_name_rdn_key": {
-                    "type": "string"
                 }
             }
         },
@@ -12589,19 +10190,6 @@ var doc = `{
                 }
             }
         },
-        "v1.MaintenanceTimeReqV1": {
-            "type": "object",
-            "properties": {
-                "maintenance_start_time": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.TimeReqV1"
-                },
-                "maintenance_stop_time": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.TimeReqV1"
-                }
-            }
-        },
         "v1.MaintenanceTimeResV1": {
             "type": "object",
             "properties": {
@@ -12612,85 +10200,6 @@ var doc = `{
                 "maintenance_stop_time": {
                     "type": "object",
                     "$ref": "#/definitions/v1.TimeResV1"
-                }
-            }
-        },
-        "v1.ManagementPermissionResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer"
-                },
-                "desc": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.MemberGroupUserItem": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.MemberTipResV1": {
-            "type": "object",
-            "properties": {
-                "user_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.Oauth2ConfigurationReqV1": {
-            "type": "object",
-            "properties": {
-                "access_token_tag": {
-                    "type": "string"
-                },
-                "client_host": {
-                    "type": "string"
-                },
-                "client_id": {
-                    "type": "string"
-                },
-                "client_key": {
-                    "type": "string"
-                },
-                "enable_oauth2": {
-                    "type": "boolean"
-                },
-                "login_tip": {
-                    "type": "string"
-                },
-                "scopes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "server_auth_url": {
-                    "type": "string"
-                },
-                "server_token_url": {
-                    "type": "string"
-                },
-                "server_user_id_url": {
-                    "type": "string"
-                },
-                "user_id_tag": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.Operation": {
-            "type": "object",
-            "properties": {
-                "op_code": {
-                    "type": "integer"
-                },
-                "op_desc": {
-                    "type": "string"
                 }
             }
         },
@@ -12823,77 +10332,12 @@ var doc = `{
                 }
             }
         },
-        "v1.PatchUserGroupReqV1": {
+        "v1.PerformanceStatistics": {
             "type": "object",
             "properties": {
-                "is_disabled": {
-                    "type": "boolean"
-                },
-                "user_group_desc": {
-                    "type": "string",
-                    "example": "this is a group"
-                },
-                "user_name_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "v1.PersonaliseReqV1": {
-            "type": "object",
-            "properties": {
-                "title": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.ProjectDetailItem": {
-            "type": "object",
-            "properties": {
-                "archived": {
-                    "type": "boolean"
-                },
-                "create_time": {
-                    "type": "string"
-                },
-                "create_user_name": {
-                    "type": "string"
-                },
-                "desc": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.ProjectListItem": {
-            "type": "object",
-            "properties": {
-                "archived": {
-                    "type": "boolean"
-                },
-                "create_time": {
-                    "type": "string"
-                },
-                "create_user_name": {
-                    "type": "string"
-                },
-                "desc": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.ProjectRuleTemplateInstance": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string"
+                "affect_rows": {
+                    "type": "object",
+                    "$ref": "#/definitions/v1.AffectRows"
                 }
             }
         },
@@ -12906,12 +10350,6 @@ var doc = `{
                 "desc": {
                     "type": "string"
                 },
-                "instance_list": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.ProjectRuleTemplateInstance"
-                    }
-                },
                 "rule_template_name": {
                     "type": "string"
                 }
@@ -12922,14 +10360,6 @@ var doc = `{
             "properties": {
                 "score": {
                     "type": "integer"
-                }
-            }
-        },
-        "v1.ProjectTipResV1": {
-            "type": "object",
-            "properties": {
-                "project_name": {
-                    "type": "string"
                 }
             }
         },
@@ -12981,40 +10411,6 @@ var doc = `{
                 }
             }
         },
-        "v1.RoleResV1": {
-            "type": "object",
-            "properties": {
-                "is_disabled": {
-                    "type": "boolean"
-                },
-                "operation_list": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.Operation"
-                    }
-                },
-                "role_desc": {
-                    "type": "string"
-                },
-                "role_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.RoleTipResV1": {
-            "type": "object",
-            "properties": {
-                "operations": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.Operation"
-                    }
-                },
-                "role_name": {
-                    "type": "string"
-                }
-            }
-        },
         "v1.RoleUserCount": {
             "type": "object",
             "properties": {
@@ -13023,6 +10419,31 @@ var doc = `{
                 },
                 "role": {
                     "type": "string"
+                }
+            }
+        },
+        "v1.RuleInfo": {
+            "type": "object",
+            "properties": {
+                "annotation": {
+                    "type": "string",
+                    "example": "this is test rule"
+                },
+                "desc": {
+                    "type": "string",
+                    "example": "this is test rule"
+                }
+            }
+        },
+        "v1.RuleKnowledgeResV1": {
+            "type": "object",
+            "properties": {
+                "knowledge_content": {
+                    "type": "string"
+                },
+                "rule": {
+                    "type": "object",
+                    "$ref": "#/definitions/v1.RuleInfo"
                 }
             }
         },
@@ -13068,12 +10489,6 @@ var doc = `{
                 "desc": {
                     "type": "string"
                 },
-                "instance_list": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.ProjectRuleTemplateInstance"
-                    }
-                },
                 "rule_list": {
                     "type": "array",
                     "items": {
@@ -13088,6 +10503,9 @@ var doc = `{
         "v1.RuleReqV1": {
             "type": "object",
             "properties": {
+                "is_custom_rule": {
+                    "type": "boolean"
+                },
                 "level": {
                     "type": "string",
                     "example": "error"
@@ -13118,6 +10536,9 @@ var doc = `{
                 "desc": {
                     "type": "string"
                 },
+                "is_custom_rule": {
+                    "type": "boolean"
+                },
                 "level": {
                     "type": "string",
                     "enum": [
@@ -13143,6 +10564,17 @@ var doc = `{
                 }
             }
         },
+        "v1.RuleRespV1": {
+            "type": "object",
+            "properties": {
+                "desc": {
+                    "type": "string"
+                },
+                "rule_name": {
+                    "type": "string"
+                }
+            }
+        },
         "v1.RuleTemplateDetailResV1": {
             "type": "object",
             "properties": {
@@ -13151,12 +10583,6 @@ var doc = `{
                 },
                 "desc": {
                     "type": "string"
-                },
-                "instance_list": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.GlobalRuleTemplateInstance"
-                    }
                 },
                 "rule_list": {
                     "type": "array",
@@ -13178,12 +10604,6 @@ var doc = `{
                 "desc": {
                     "type": "string"
                 },
-                "instance_list": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.GlobalRuleTemplateInstance"
-                    }
-                },
                 "rule_template_name": {
                     "type": "string"
                 }
@@ -13195,14 +10615,34 @@ var doc = `{
                 "db_type": {
                     "type": "string"
                 },
+                "rule_template_id": {
+                    "type": "string"
+                },
                 "rule_template_name": {
                     "type": "string"
+                }
+            }
+        },
+        "v1.RuleTips": {
+            "type": "object",
+            "properties": {
+                "db_type": {
+                    "type": "string"
+                },
+                "rule": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.RuleRespV1"
+                    }
                 }
             }
         },
         "v1.RuleTypeV1": {
             "type": "object",
             "properties": {
+                "is_custom_rule_type": {
+                    "type": "boolean"
+                },
                 "rule_count": {
                     "type": "integer"
                 },
@@ -13211,23 +10651,59 @@ var doc = `{
                 }
             }
         },
-        "v1.SMTPConfigurationResV1": {
+        "v1.SQLAuditRecord": {
             "type": "object",
             "properties": {
-                "enable_smtp_notify": {
-                    "type": "boolean"
-                },
-                "is_skip_verify": {
-                    "type": "boolean"
-                },
-                "smtp_host": {
+                "created_at": {
                     "type": "string"
                 },
-                "smtp_port": {
+                "creator": {
                     "type": "string"
                 },
-                "smtp_username": {
+                "instance": {
+                    "type": "object",
+                    "$ref": "#/definitions/v1.SQLAuditRecordInstance"
+                },
+                "sql_audit_record_id": {
                     "type": "string"
+                },
+                "sql_audit_status": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "task": {
+                    "type": "object",
+                    "$ref": "#/definitions/v1.AuditTaskResV1"
+                }
+            }
+        },
+        "v1.SQLAuditRecordInstance": {
+            "type": "object",
+            "properties": {
+                "db_host": {
+                    "type": "string",
+                    "example": "10.10.10.10"
+                },
+                "db_port": {
+                    "type": "string",
+                    "example": "3306"
+                }
+            }
+        },
+        "v1.SQLAuditRecordResData": {
+            "type": "object",
+            "properties": {
+                "sql_audit_record_id": {
+                    "type": "string"
+                },
+                "task": {
+                    "type": "object",
+                    "$ref": "#/definitions/v1.AuditTaskResV1"
                 }
             }
         },
@@ -13244,33 +10720,6 @@ var doc = `{
                 },
                 "sql": {
                     "type": "string"
-                }
-            }
-        },
-        "v1.SQLQueryConfigReqV1": {
-            "type": "object",
-            "properties": {
-                "allow_query_when_less_than_audit_level": {
-                    "type": "string",
-                    "enum": [
-                        "normal",
-                        "notice",
-                        "warn",
-                        "error"
-                    ],
-                    "example": "error"
-                },
-                "audit_enabled": {
-                    "type": "boolean",
-                    "example": false
-                },
-                "max_pre_query_rows": {
-                    "type": "integer",
-                    "example": 100
-                },
-                "query_timeout_second": {
-                    "type": "integer",
-                    "example": 10
                 }
             }
         },
@@ -13294,6 +10743,44 @@ var doc = `{
                 },
                 "query_timeout_second": {
                     "type": "integer"
+                }
+            }
+        },
+        "v1.Source": {
+            "type": "object",
+            "properties": {
+                "audit_plan_name": {
+                    "type": "string"
+                },
+                "sql_audit_record_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "audit_plan",
+                        "sql_audit_record"
+                    ]
+                }
+            }
+        },
+        "v1.SqlAnalysis": {
+            "type": "object",
+            "properties": {
+                "performance_statistics": {
+                    "type": "object",
+                    "$ref": "#/definitions/v1.PerformanceStatistics"
+                },
+                "sql_explain": {
+                    "type": "object",
+                    "$ref": "#/definitions/v1.SQLExplain"
+                },
+                "table_metas": {
+                    "type": "object",
+                    "$ref": "#/definitions/v1.TableMetas"
                 }
             }
         },
@@ -13337,6 +10824,66 @@ var doc = `{
                 },
                 "percent": {
                     "type": "number"
+                }
+            }
+        },
+        "v1.SqlManage": {
+            "type": "object",
+            "properties": {
+                "appear_num": {
+                    "type": "integer"
+                },
+                "assignees": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "audit_result": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.AuditResult"
+                    }
+                },
+                "endpoint": {
+                    "type": "string"
+                },
+                "first_appear_time": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "instance_name": {
+                    "type": "string"
+                },
+                "last_appear_time": {
+                    "type": "string"
+                },
+                "remark": {
+                    "type": "string"
+                },
+                "schema_name": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "object",
+                    "$ref": "#/definitions/v1.Source"
+                },
+                "sql": {
+                    "type": "string"
+                },
+                "sql_fingerprint": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "unhandled",
+                        "solved",
+                        "ignored",
+                        "manual_audited"
+                    ]
                 }
             }
         },
@@ -13395,33 +10942,6 @@ var doc = `{
                 },
                 "risk_rate": {
                     "type": "integer"
-                }
-            }
-        },
-        "v1.SyncInstanceResV1": {
-            "type": "object",
-            "properties": {
-                "is_sync_instance_success": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "sync_error_message": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.SyncTaskTipsResV1": {
-            "type": "object",
-            "properties": {
-                "db_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "source": {
-                    "type": "string",
-                    "example": "actiontech-dmp"
                 }
             }
         },
@@ -13520,6 +11040,20 @@ var doc = `{
                 },
                 "field_name": {
                     "type": "string"
+                }
+            }
+        },
+        "v1.TableMetas": {
+            "type": "object",
+            "properties": {
+                "err_message": {
+                    "type": "string"
+                },
+                "table_meta_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.TableMeta"
+                    }
                 }
             }
         },
@@ -13622,114 +11156,6 @@ var doc = `{
                 }
             }
         },
-        "v1.TestSMTPConfigurationReqV1": {
-            "type": "object",
-            "properties": {
-                "recipient_addr": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.TestSMTPConfigurationResDataV1": {
-            "type": "object",
-            "properties": {
-                "is_smtp_send_normal": {
-                    "type": "boolean"
-                },
-                "send_error_message": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.TestSMTPConfigurationResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.TestSMTPConfigurationResDataV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.TestWeChatConfigurationReqV1": {
-            "type": "object",
-            "properties": {
-                "recipient_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.TestWeChatConfigurationResDataV1": {
-            "type": "object",
-            "properties": {
-                "is_wechat_send_normal": {
-                    "type": "boolean"
-                },
-                "send_error_message": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.TestWeChatConfigurationResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.TestWeChatConfigurationResDataV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.TestWorkflowWebHookConfigResDataV1": {
-            "type": "object",
-            "properties": {
-                "send_error_message": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.TestWorkflowWebHookConfigResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.TestWorkflowWebHookConfigResDataV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.TimeReqV1": {
-            "type": "object",
-            "properties": {
-                "hour": {
-                    "type": "integer"
-                },
-                "minute": {
-                    "type": "integer"
-                }
-            }
-        },
         "v1.TimeResV1": {
             "type": "object",
             "properties": {
@@ -13751,23 +11177,6 @@ var doc = `{
                 "data": {
                     "type": "object",
                     "$ref": "#/definitions/v1.AuditPlanReportResV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.TriggerSyncInstanceResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.SyncInstanceResV1"
                 },
                 "message": {
                     "type": "string",
@@ -13862,29 +11271,11 @@ var doc = `{
                 }
             }
         },
-        "v1.UpdateCurrentUserPasswordReqV1": {
+        "v1.UpdateCompanyNoticeReq": {
             "type": "object",
             "properties": {
-                "new_password": {
+                "notice_str": {
                     "type": "string"
-                },
-                "password": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.UpdateCurrentUserReqV1": {
-            "type": "object",
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "phone": {
-                    "type": "string"
-                },
-                "wechat_id": {
-                    "type": "string",
-                    "example": "UserID"
                 }
             }
         },
@@ -13939,6 +11330,11 @@ var doc = `{
         },
         "v1.UpdateFeishuConfigurationReqV1": {
             "type": "object",
+            "required": [
+                "app_id",
+                "app_secret",
+                "is_feishu_notification_enabled"
+            ],
             "properties": {
                 "app_id": {
                     "type": "string"
@@ -13951,109 +11347,11 @@ var doc = `{
                 }
             }
         },
-        "v1.UpdateInstanceReqV1": {
-            "type": "object",
-            "properties": {
-                "additional_params": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.InstanceAdditionalParamReqV1"
-                    }
-                },
-                "db_host": {
-                    "type": "string",
-                    "example": "10.10.10.10"
-                },
-                "db_password": {
-                    "type": "string",
-                    "example": "123456"
-                },
-                "db_port": {
-                    "type": "string",
-                    "example": "3306"
-                },
-                "db_type": {
-                    "type": "string",
-                    "example": "mysql"
-                },
-                "db_user": {
-                    "type": "string",
-                    "example": "root"
-                },
-                "desc": {
-                    "type": "string",
-                    "example": "this is a test instance"
-                },
-                "maintenance_times": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.MaintenanceTimeReqV1"
-                    }
-                },
-                "rule_template_name": {
-                    "type": "string"
-                },
-                "sql_query_config": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.SQLQueryConfigReqV1"
-                }
-            }
-        },
-        "v1.UpdateMemberGroupReqV1": {
-            "type": "object",
-            "properties": {
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.BindRoleReqV1"
-                    }
-                }
-            }
-        },
-        "v1.UpdateMemberReqV1": {
-            "type": "object",
-            "properties": {
-                "is_manager": {
-                    "type": "boolean"
-                },
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.BindRoleReqV1"
-                    }
-                }
-            }
-        },
-        "v1.UpdateOtherUserPasswordReqV1": {
-            "type": "object",
-            "properties": {
-                "password": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.UpdateProjectReqV1": {
-            "type": "object",
-            "properties": {
-                "desc": {
-                    "type": "string"
-                }
-            }
-        },
         "v1.UpdateProjectRuleTemplateReqV1": {
             "type": "object",
             "properties": {
                 "desc": {
                     "type": "string"
-                },
-                "instance_name_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "mysql-xxx"
-                    ]
                 },
                 "rule_list": {
                     "type": "array",
@@ -14063,19 +11361,10 @@ var doc = `{
                 }
             }
         },
-        "v1.UpdateRoleReqV1": {
+        "v1.UpdateRuleKnowledgeReq": {
             "type": "object",
             "properties": {
-                "is_disabled": {
-                    "type": "boolean"
-                },
-                "operation_code_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "role_desc": {
+                "knowledge_content": {
                     "type": "string"
                 }
             }
@@ -14094,51 +11383,14 @@ var doc = `{
                 }
             }
         },
-        "v1.UpdateSMTPConfigurationReqV1": {
+        "v1.UpdateSQLAuditRecordReqV1": {
             "type": "object",
             "properties": {
-                "enable_smtp_notify": {
-                    "type": "boolean"
-                },
-                "is_skip_verify": {
-                    "type": "boolean"
-                },
-                "smtp_host": {
-                    "type": "string",
-                    "example": "smtp.email.qq.com"
-                },
-                "smtp_password": {
-                    "type": "string",
-                    "example": "123"
-                },
-                "smtp_port": {
-                    "type": "string",
-                    "example": "465"
-                },
-                "smtp_username": {
-                    "type": "string",
-                    "example": "test@qq.com"
-                }
-            }
-        },
-        "v1.UpdateSyncInstanceTaskReqV1": {
-            "type": "object",
-            "properties": {
-                "global_rule_template": {
-                    "type": "string",
-                    "example": "default_mysql"
-                },
-                "sync_instance_interval": {
-                    "type": "string",
-                    "example": "0 0 * * *"
-                },
-                "url": {
-                    "type": "string",
-                    "example": "http://10.186.62.56:10000"
-                },
-                "version": {
-                    "type": "string",
-                    "example": "5.23.01.0"
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -14156,59 +11408,6 @@ var doc = `{
                 "workflow_expired_hours": {
                     "type": "integer",
                     "example": 720
-                }
-            }
-        },
-        "v1.UpdateUserReqV1": {
-            "type": "object",
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "is_disabled": {
-                    "type": "boolean"
-                },
-                "management_permission_code_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "phone": {
-                    "type": "string"
-                },
-                "user_group_name_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "wechat_id": {
-                    "type": "string",
-                    "example": "UserID"
-                }
-            }
-        },
-        "v1.UpdateWeChatConfigurationReqV1": {
-            "type": "object",
-            "properties": {
-                "agent_id": {
-                    "type": "integer"
-                },
-                "corp_id": {
-                    "type": "string"
-                },
-                "corp_secret": {
-                    "type": "string"
-                },
-                "enable_wechat_notify": {
-                    "type": "boolean"
-                },
-                "proxy_ip": {
-                    "type": "string"
-                },
-                "safe_enabled": {
-                    "type": "boolean"
                 }
             }
         },
@@ -14246,12 +11445,6 @@ var doc = `{
                 "desc": {
                     "type": "string"
                 },
-                "instance_name_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "workflow_step_template_list": {
                     "type": "array",
                     "items": {
@@ -14260,221 +11453,13 @@ var doc = `{
                 }
             }
         },
-        "v1.UploadLogoResDataV1": {
-            "type": "object",
-            "properties": {
-                "logo_url": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.UploadLogoResV1": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.UploadLogoResDataV1"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "v1.UserBindProjectResV1": {
-            "type": "object",
-            "properties": {
-                "is_manager": {
-                    "type": "boolean"
-                },
-                "project_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.UserDetailResV1": {
-            "type": "object",
-            "properties": {
-                "bind_projects": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.UserBindProjectResV1"
-                    }
-                },
-                "email": {
-                    "type": "string"
-                },
-                "is_admin": {
-                    "type": "boolean"
-                },
-                "is_disabled": {
-                    "type": "boolean"
-                },
-                "login_type": {
-                    "type": "string"
-                },
-                "management_permission_list": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.ManagementPermissionResV1"
-                    }
-                },
-                "phone": {
-                    "type": "string"
-                },
-                "user_group_name_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "user_name": {
-                    "type": "string"
-                },
-                "wechat_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.UserGroupListItemResV1": {
-            "type": "object",
-            "properties": {
-                "is_disabled": {
-                    "type": "boolean"
-                },
-                "user_group_desc": {
-                    "type": "string"
-                },
-                "user_group_name": {
-                    "type": "string"
-                },
-                "user_name_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "v1.UserGroupTipListItem": {
-            "type": "object",
-            "properties": {
-                "user_group_name": {
-                    "type": "string"
-                },
-                "user_names": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "v1.UserLoginReqV1": {
-            "type": "object",
-            "properties": {
-                "password": {
-                    "type": "string",
-                    "example": "123456"
-                },
-                "username": {
-                    "type": "string",
-                    "example": "test"
-                }
-            }
-        },
-        "v1.UserLoginResV1": {
-            "type": "object",
-            "properties": {
-                "token": {
-                    "type": "string",
-                    "example": "this is a jwt token string"
-                }
-            }
-        },
-        "v1.UserResV1": {
-            "type": "object",
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "is_disabled": {
-                    "type": "boolean"
-                },
-                "login_type": {
-                    "type": "string"
-                },
-                "management_permission_list": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.ManagementPermissionResV1"
-                    }
-                },
-                "phone": {
-                    "type": "string"
-                },
-                "user_group_name_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "user_name": {
-                    "type": "string"
-                },
-                "wechat_id": {
-                    "type": "string"
-                }
-            }
-        },
         "v1.UserTipResV1": {
             "type": "object",
             "properties": {
+                "user_id": {
+                    "type": "string"
+                },
                 "user_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.WeChatConfigurationResV1": {
-            "type": "object",
-            "properties": {
-                "agent_id": {
-                    "type": "integer"
-                },
-                "corp_id": {
-                    "type": "string"
-                },
-                "enable_wechat_notify": {
-                    "type": "boolean"
-                },
-                "proxy_ip": {
-                    "type": "string"
-                },
-                "safe_enabled": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "v1.WebHookConfigV1": {
-            "type": "object",
-            "properties": {
-                "enable": {
-                    "type": "boolean"
-                },
-                "max_retry_times": {
-                    "type": "integer"
-                },
-                "retry_interval_seconds": {
-                    "type": "integer"
-                },
-                "token": {
-                    "type": "string"
-                },
-                "url": {
                     "type": "string"
                 }
             }
@@ -14485,7 +11470,7 @@ var doc = `{
                 "approved_by_authorized": {
                     "type": "boolean"
                 },
-                "assignee_user_name_list": {
+                "assignee_user_id_list": {
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -14512,7 +11497,7 @@ var doc = `{
                 "approved_by_authorized": {
                     "type": "boolean"
                 },
-                "assignee_user_name_list": {
+                "assignee_user_id_list": {
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -14881,11 +11866,8 @@ var doc = `{
                 "desc": {
                     "type": "string"
                 },
-                "instance_name_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "update_time": {
+                    "type": "string"
                 },
                 "workflow_step_template_list": {
                     "type": "array",
@@ -14965,6 +11947,53 @@ var doc = `{
                 }
             }
         },
+        "v2.AuditPlanSQLReqV2": {
+            "type": "object",
+            "properties": {
+                "audit_plan_sql_counter": {
+                    "type": "string",
+                    "example": "6"
+                },
+                "audit_plan_sql_fingerprint": {
+                    "type": "string",
+                    "example": "select * from t1 where id = ?"
+                },
+                "audit_plan_sql_last_receive_text": {
+                    "type": "string",
+                    "example": "select * from t1 where id = 1"
+                },
+                "audit_plan_sql_last_receive_timestamp": {
+                    "type": "string",
+                    "example": "RFC3339"
+                },
+                "audit_plan_sql_schema": {
+                    "type": "string",
+                    "example": "db1"
+                },
+                "db_user": {
+                    "type": "string",
+                    "example": "database_user001"
+                },
+                "endpoints": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "first_query_at": {
+                    "type": "string",
+                    "example": "2023-09-12T02:48:01.317880Z"
+                },
+                "query_time_avg": {
+                    "type": "number",
+                    "example": 3.22
+                },
+                "query_time_max": {
+                    "type": "number",
+                    "example": 5.22
+                }
+            }
+        },
         "v2.AuditResDataV2": {
             "type": "object",
             "properties": {
@@ -14995,6 +12024,9 @@ var doc = `{
         "v2.AuditResult": {
             "type": "object",
             "properties": {
+                "db_type": {
+                    "type": "string"
+                },
                 "level": {
                     "type": "string",
                     "example": "warn"
@@ -15060,6 +12092,15 @@ var doc = `{
                 },
                 "rollback_sql": {
                     "type": "string"
+                },
+                "sql_source_file": {
+                    "type": "string"
+                },
+                "sql_start_line": {
+                    "type": "integer"
+                },
+                "sql_type": {
+                    "type": "string"
                 }
             }
         },
@@ -15082,58 +12123,6 @@ var doc = `{
                     "items": {
                         "type": "string"
                     }
-                }
-            }
-        },
-        "v2.CreateInstanceReqV2": {
-            "type": "object",
-            "properties": {
-                "additional_params": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.InstanceAdditionalParamReqV1"
-                    }
-                },
-                "db_host": {
-                    "type": "string",
-                    "example": "10.10.10.10"
-                },
-                "db_password": {
-                    "type": "string",
-                    "example": "123456"
-                },
-                "db_port": {
-                    "type": "string",
-                    "example": "3306"
-                },
-                "db_type": {
-                    "type": "string",
-                    "example": "mysql"
-                },
-                "db_user": {
-                    "type": "string",
-                    "example": "root"
-                },
-                "desc": {
-                    "type": "string",
-                    "example": "this is a test instance"
-                },
-                "instance_name": {
-                    "type": "string",
-                    "example": "test"
-                },
-                "maintenance_times": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/v1.MaintenanceTimeReqV1"
-                    }
-                },
-                "rule_template_name": {
-                    "type": "string"
-                },
-                "sql_query_config": {
-                    "type": "object",
-                    "$ref": "#/definitions/v1.SQLQueryConfigReqV1"
                 }
             }
         },
@@ -15176,6 +12165,46 @@ var doc = `{
             "properties": {
                 "workflow_id": {
                     "type": "string"
+                }
+            }
+        },
+        "v2.DirectAuditFileReqV2": {
+            "type": "object",
+            "properties": {
+                "file_contents": {
+                    "description": "调用方不应该关心SQL是否被完美的拆分成独立的条目, 拆分SQL由SQLE实现\n每个数组元素是一个文件内容",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "select * from t1; select * from t2;"
+                    ]
+                },
+                "instance_name": {
+                    "type": "string",
+                    "example": "instance1"
+                },
+                "instance_type": {
+                    "type": "string",
+                    "example": "MySQL"
+                },
+                "project_name": {
+                    "type": "string",
+                    "example": "project1"
+                },
+                "schema_name": {
+                    "type": "string",
+                    "example": "schema1"
+                },
+                "sql_type": {
+                    "type": "string",
+                    "enum": [
+                        "sql",
+                        "mybatis",
+                        ""
+                    ],
+                    "example": "sql"
                 }
             }
         },
@@ -15227,6 +12256,20 @@ var doc = `{
                 },
                 "driver_name": {
                     "type": "string"
+                },
+                "logo_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.FullSyncAuditPlanSQLsReqV2": {
+            "type": "object",
+            "properties": {
+                "audit_plan_sql_list": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v2.AuditPlanSQLReqV2"
+                    }
                 }
             }
         },
@@ -15349,7 +12392,7 @@ var doc = `{
                 }
             }
         },
-        "v2.GetInstancesResV2": {
+        "v2.GetSqlManageListResp": {
             "type": "object",
             "properties": {
                 "code": {
@@ -15359,14 +12402,20 @@ var doc = `{
                 "data": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/v2.InstanceResV2"
+                        "$ref": "#/definitions/v2.SqlManage"
                     }
                 },
                 "message": {
                     "type": "string",
                     "example": "ok"
                 },
-                "total_nums": {
+                "sql_manage_bad_num": {
+                    "type": "integer"
+                },
+                "sql_manage_optimized_num": {
+                    "type": "integer"
+                },
+                "sql_manage_total_num": {
                     "type": "integer"
                 }
             }
@@ -15532,6 +12581,17 @@ var doc = `{
                 }
             }
         },
+        "v2.PartialSyncAuditPlanSQLsReqV2": {
+            "type": "object",
+            "properties": {
+                "audit_plan_sql_list": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v2.AuditPlanSQLReqV2"
+                    }
+                }
+            }
+        },
         "v2.PerformanceStatistics": {
             "type": "object",
             "properties": {
@@ -15572,6 +12632,69 @@ var doc = `{
                 },
                 "sql": {
                     "type": "string"
+                }
+            }
+        },
+        "v2.SqlManage": {
+            "type": "object",
+            "properties": {
+                "assignees": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "audit_result": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.AuditResult"
+                    }
+                },
+                "endpoints": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "first_appear_timestamp": {
+                    "type": "string"
+                },
+                "fp_count": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "instance_name": {
+                    "type": "string"
+                },
+                "last_receive_timestamp": {
+                    "type": "string"
+                },
+                "remark": {
+                    "type": "string"
+                },
+                "schema_name": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "object",
+                    "$ref": "#/definitions/v1.Source"
+                },
+                "sql": {
+                    "type": "string"
+                },
+                "sql_fingerprint": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "unhandled",
+                        "solved",
+                        "ignored",
+                        "manual_audited"
+                    ]
                 }
             }
         },

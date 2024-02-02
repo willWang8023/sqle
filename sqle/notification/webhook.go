@@ -1,15 +1,16 @@
 package notification
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"net/http"
 	"time"
 
-	"github.com/actiontech/sqle/sqle/notification/webhook"
-	"github.com/actiontech/sqle/sqle/utils/retry"
+	v1 "github.com/actiontech/dms/pkg/dms-common/api/dms/v1"
+	"github.com/actiontech/dms/pkg/dms-common/dmsobject"
+	"github.com/actiontech/sqle/sqle/api/controller"
+	"github.com/actiontech/sqle/sqle/dms"
+	driverV2 "github.com/actiontech/sqle/sqle/driver/v2"
+	"github.com/actiontech/sqle/sqle/model"
 )
 
 type webHookRequestBody struct {
@@ -24,73 +25,89 @@ type workflowPayload struct {
 	WorkflowID      string `json:"workflow_id"`
 	WorkflowSubject string `json:"workflow_subject"`
 	WorkflowStatus  string `json:"workflow_status"`
+
+	ThirdPartyUserInfo string          `json:"third_party_user_info"`
+	CurrentStepID      uint            `json:"current_step_info"`
+	WorkflowTaskID     uint            `json:"workflow_task_id"`
+	InstanceInfo       []InstanceInfo  `json:"instanceInfo"`
+	WorkflowDesc       string          `json:"workflow_desc"`
+	SqlTypeMap         map[string]bool `json:"sql_type_map"` // DDL DML DQL
+}
+
+type InstanceInfo struct {
+	Host   string `json:"host"`
+	Schema string `json:"schema"`
+	Port   string `json:"port"`
+	Desc   string `json:"desc"`
 }
 
 type httpBodyPayload struct {
 	Workflow *workflowPayload `json:"workflow"`
 }
 
-func TestWorkflowConfig() (err error) {
-	return workflowSendRequest("create",
-		"test_project", "1658637666259832832", "test_workflow", "wait_for_audit")
-}
+// func TestWorkflowConfig() (err error) {
+// 	return workflowSendRequest("create",
+// 		"test_project", "1658637666259832832", "test_workflow", "wait_for_audit")
+// }
 
-func workflowSendRequest(action,
-	projectName, workflowID, workflowSubject, workflowStatus string) (err error) {
-	cfg := webhook.WorkflowCfg
-	if cfg == nil {
-		return fmt.Errorf("workflow webhook config missing")
+func workflowSendRequest(action string, workflow *model.Workflow) (err error) {
+	user, err := dms.GetUser(context.TODO(), workflow.CreateUserId, dms.GetDMSServerAddress())
+	if err != nil {
+		return err
 	}
-
-	if cfg.URL == "" {
-		return fmt.Errorf("url is missing, please check webhook config")
-	}
-
 	reqBody := &webHookRequestBody{
 		Event:     "workflow",
 		Action:    action,
 		Timestamp: time.Now().Format(time.RFC3339),
 		Payload: &httpBodyPayload{
 			Workflow: &workflowPayload{
-				ProjectName:     projectName,
-				WorkflowID:      workflowID,
-				WorkflowSubject: workflowSubject,
-				WorkflowStatus:  workflowStatus,
+				ProjectName:        string(workflow.ProjectId),
+				WorkflowID:         workflow.WorkflowId,
+				WorkflowSubject:    workflow.Subject,
+				WorkflowStatus:     workflow.Record.Status,
+				ThirdPartyUserInfo: user.ThirdPartyUserInfo,
+				CurrentStepID:      workflow.CurrentStep().ID,
+				WorkflowDesc:       workflow.Desc,
+				SqlTypeMap: map[string]bool{
+					driverV2.SQLTypeDDL: false,
+					driverV2.SQLTypeDML: false,
+					driverV2.SQLTypeDQL: false,
+				},
 			},
 		},
 	}
-
+	for _, record := range workflow.Record.InstanceRecords {
+		if record.Instance == nil {
+			continue
+		}
+		info := InstanceInfo{
+			Host: record.Instance.Host,
+			Port: record.Instance.Port,
+			Desc: record.Instance.Desc,
+		}
+		if record.Task == nil {
+			reqBody.Payload.Workflow.InstanceInfo = append(reqBody.Payload.Workflow.InstanceInfo, info)
+			continue
+		}
+		info.Schema = record.Task.Schema
+		reqBody.Payload.Workflow.WorkflowTaskID = record.Task.ID
+		for _, executeSql := range record.Task.ExecuteSQLs {
+			if executeSql.SQLType != "" {
+				reqBody.Payload.Workflow.SqlTypeMap[executeSql.SQLType] = true
+			}
+		}
+		reqBody.Payload.Workflow.InstanceInfo = append(reqBody.Payload.Workflow.InstanceInfo, info)
+	}
 	b, err := json.Marshal(reqBody)
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, cfg.URL, bytes.NewBuffer(b))
-	if err != nil {
-		return
-	}
-	if cfg.Token != "" {
-		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", cfg.Token))
-	}
-
-	doneChan := make(chan struct{})
-	return retry.Do(func() error {
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == http.StatusOK {
-			return nil
-		}
-		respBytes, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("response status_code(%v) body(%s)", resp.StatusCode, respBytes)
-	}, doneChan,
-		retry.Delay(time.Duration(cfg.RetryIntervalSeconds)*time.Second),
-		retry.Attempts(uint(cfg.MaxRetryTimes)))
+	return dmsobject.WebHookSendMessage(context.TODO(), controller.GetDMSServerAddress(), &v1.WebHookSendMessageReq{
+		WebHookMessage: &v1.WebHooksMessage{
+			Message:          string(b),
+			TriggerEventType: v1.TriggerEventTypeWorkflow,
+		},
+	})
 
 }

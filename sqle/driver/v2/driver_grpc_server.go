@@ -36,9 +36,10 @@ type Rule struct {
 
 	// Category is the category of the rule. Such as "Naming Conventions"...
 	// Rules will be displayed on the SQLE rule list page by category.
-	Category string
-	Level    RuleLevel
-	Params   params.Params
+	Category  string
+	Level     RuleLevel
+	Params    params.Params
+	Knowledge RuleKnowledge
 }
 
 type Config struct {
@@ -84,6 +85,7 @@ func (d *DriverGrpcServer) Metas(ctx context.Context, req *protoV2.Empty) (*prot
 	return &protoV2.MetasResponse{
 		PluginName:               d.Meta.PluginName,
 		DatabaseDefaultPort:      d.Meta.DatabaseDefaultPort,
+		Logo:                     d.Meta.Logo,
 		DatabaseAdditionalParams: ConvertParamToProtoParam(d.Meta.DatabaseAdditionalParams),
 		Rules:                    rules,
 		EnabledOptionalModule:    ms,
@@ -431,5 +433,19 @@ func (d *DriverGrpcServer) EstimateSQLAffectRows(ctx context.Context, req *proto
 	return &protoV2.EstimateSQLAffectRowsResponse{
 		Count:      ar.Count,
 		ErrMessage: ar.ErrMessage,
+	}, nil
+}
+
+func (d *DriverGrpcServer) KillProcess(ctx context.Context, req *protoV2.KillProcessRequest) (*protoV2.KillProcessResponse, error) {
+	driver, err := d.getDriverBySession(req.Session)
+	if err != nil {
+		return &protoV2.KillProcessResponse{}, err
+	}
+	info, err := driver.KillProcess(ctx)
+	if err != nil {
+		return &protoV2.KillProcessResponse{}, err
+	}
+	return &protoV2.KillProcessResponse{
+		ErrMessage: info.ErrMessage,
 	}, nil
 }

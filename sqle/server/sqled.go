@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/actiontech/sqle/sqle/dms"
 	"github.com/actiontech/sqle/sqle/driver"
 	"github.com/actiontech/sqle/sqle/utils"
 	"github.com/go-sql-driver/mysql"
@@ -63,6 +64,10 @@ func (s *Sqled) HasTask(taskId string) bool {
 func (s *Sqled) addTask(taskId string, typ int) (*action, error) {
 	var err error
 	var p driver.Plugin
+	var rules []*model.Rule
+	var customRules []*model.CustomRule
+	var instance *model.Instance
+	st := model.GetStorage()
 	// var drvMgr driver.DriverManager
 	entry := log.NewEntry().WithField("task_id", taskId)
 	action := &action{
@@ -81,13 +86,25 @@ func (s *Sqled) addTask(taskId string, typ int) (*action, error) {
 		return action, errors.New(errors.TaskRunning, fmt.Errorf("task is running"))
 	}
 
-	task, exist, err := model.GetStorage().GetTaskDetailById(taskId)
+	task, exist, err := st.GetTaskDetailById(taskId)
 	if err != nil {
 		goto Error
 	}
 	if !exist {
 		err = errors.New(errors.TaskNotExist, fmt.Errorf("task not exist"))
 		goto Error
+	}
+	if task.InstanceId != 0 {
+		instance, exist, err = dms.GetInstancesById(context.Background(), task.InstanceId)
+		if err != nil {
+			goto Error
+		}
+		if !exist {
+			err = errors.New(errors.DataNotExist, fmt.Errorf("instance not exist"))
+			goto Error
+		}
+
+		task.Instance = instance
 	}
 
 	if err = action.validation(task); err != nil {
@@ -96,11 +113,17 @@ func (s *Sqled) addTask(taskId string, typ int) (*action, error) {
 	action.task = task
 
 	// plugin will be closed by drvMgr in Sqled.do().
-	p, err = newDriverManagerWithAudit(entry, task.Instance, task.Schema, task.DBType, nil, "")
+	rules, customRules, err = st.GetAllRulesByTmpNameAndProjectIdInstanceDBType("", "", task.Instance, task.DBType)
+	if err != nil {
+		goto Error
+	}
+	p, err = newDriverManagerWithAudit(entry, task.Instance, task.Schema, task.DBType, rules)
 	if err != nil {
 		goto Error
 	}
 	action.plugin = p
+	action.customRules = customRules
+	action.rules = rules
 
 	s.queue <- action
 
@@ -195,6 +218,9 @@ type action struct {
 	done chan struct{}
 
 	terminateStatus int // 0:no terminate, 1,terminating, 2: terminate_succeeded, 3:terminate_failed
+
+	customRules []*model.CustomRule
+	rules       []*model.Rule
 }
 
 const (
@@ -266,18 +292,18 @@ func (a *action) validation(task *model.Task) error {
 func (a *action) audit() (err error) {
 	st := model.GetStorage()
 
-	err = audit(a.entry, a.task, a.plugin)
+	err = audit(a.entry, a.task, a.plugin, a.customRules)
 	if err != nil {
 		return err
 	}
 
 	// skip generate if audit is static
-	if a.task.SQLSource == model.TaskSQLSourceFromMyBatisXMLFile || a.task.InstanceId == 0 {
+	if a.task.SQLSource == model.TaskSQLSourceFromMyBatisXMLFile || a.task.SQLSource == model.TaskSQLSourceFromZipFile || a.task.SQLSource == model.TaskSQLSourceFromGitRepository || a.task.InstanceId == 0 {
 		a.entry.Warn("skip generate rollback SQLs")
 	} else if !driver.GetPluginManager().IsOptionalModuleEnabled(a.task.DBType, driverV2.OptionalModuleGenRollbackSQL) {
 		a.entry.Infof("skip generate rollback SQLs, %v", driver.NewErrPluginAPINotImplement(driverV2.OptionalModuleGenRollbackSQL))
 	} else {
-		p, err := newDriverManagerWithAudit(a.entry, a.task.Instance, a.task.Schema, a.task.DBType, nil, "")
+		p, err := newDriverManagerWithAudit(a.entry, a.task.Instance, a.task.Schema, a.task.DBType, a.rules)
 		if err != nil {
 			return xerrors.Wrap(err, "new driver for generate rollback SQL")
 		}
@@ -312,6 +338,10 @@ func (a *action) audit() (err error) {
 }
 
 func (a *action) terminateExecution(ctx context.Context) error {
+	if !driver.GetPluginManager().
+		IsOptionalModuleEnabled(a.task.DBType, driverV2.OptionalModuleKillProcess) {
+		return driver.NewErrPluginAPINotImplement(driverV2.OptionalModuleKillProcess)
+	}
 	return a.plugin.KillProcess(ctx)
 }
 
@@ -439,7 +469,7 @@ func (a *action) execTask() (err error) {
 		}
 
 		switch nodes[0].Type {
-		case driverV2.SQLTypeDML:
+		case driverV2.SQLTypeDML, driverV2.SQLTypeDQL:
 			txSQLs = append(txSQLs, executeSQL)
 			if i == len(task.ExecuteSQLs)-1 {
 				if err = a.execSQLs(txSQLs); err != nil {
@@ -586,7 +616,7 @@ ExecSQLs:
 	return execErr
 }
 
-func newDriverManagerWithAudit(l *logrus.Entry, inst *model.Instance, database string, dbType string, projectId *uint, ruleTemplateName string) (driver.Plugin, error) {
+func newDriverManagerWithAudit(l *logrus.Entry, inst *model.Instance, database string, dbType string, modelRules []*model.Rule) (driver.Plugin, error) {
 	if inst == nil && dbType == "" {
 		return nil, xerrors.Errorf("instance is nil and dbType is nil")
 	}
@@ -595,32 +625,7 @@ func newDriverManagerWithAudit(l *logrus.Entry, inst *model.Instance, database s
 		dbType = inst.DbType
 	}
 
-	st := model.GetStorage()
-
-	var err error
 	var dsn *driverV2.DSN
-	var modelRules []*model.Rule
-
-	// 填充规则
-	{
-		if ruleTemplateName != "" {
-			if projectId == nil {
-				return nil, xerrors.New("project id is needed when rule template name is given")
-			}
-			modelRules, err = st.GetRulesFromRuleTemplateByName([]uint{*projectId, model.ProjectIdForGlobalRuleTemplate}, ruleTemplateName)
-		} else {
-			if inst != nil {
-				modelRules, err = st.GetRulesByInstanceId(fmt.Sprintf("%v", inst.ID))
-			} else {
-				templateName := st.GetDefaultRuleTemplateName(dbType)
-				// 默认规则模板从全局模板里拿
-				modelRules, err = st.GetRulesFromRuleTemplateByName([]uint{model.ProjectIdForGlobalRuleTemplate}, templateName)
-			}
-		}
-		if err != nil {
-			return nil, xerrors.Errorf("get rules error: %v", err)
-		}
-	}
 
 	// 填充dsn
 	if inst != nil {

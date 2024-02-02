@@ -87,6 +87,7 @@ type Driver interface {
 	GetTableMeta(ctx context.Context, table *Table) (*TableMeta, error)
 	ExtractTableFromSQL(ctx context.Context, sql string) ([]*Table, error)
 	EstimateSQLAffectRows(ctx context.Context, sql string) (*EstimatedAffectRows, error)
+	KillProcess(ctx context.Context) (*KillProcessInfo, error)
 }
 
 type Node struct {
@@ -98,6 +99,9 @@ type Node struct {
 
 	// Fingerprint is fingerprint of Node's raw SQL.
 	Fingerprint string
+
+	// StartLine is the starting row number of the Node's raw SQL.
+	StartLine uint64
 }
 
 type RuleLevel string
@@ -285,4 +289,18 @@ type Table struct {
 type EstimatedAffectRows struct {
 	Count      int64
 	ErrMessage string
+}
+
+type KillProcessInfo struct {
+	ErrMessage string
+}
+
+func NewKillProcessInfo(errorMessage string) *KillProcessInfo {
+	return &KillProcessInfo{
+		ErrMessage: errorMessage,
+	}
+}
+
+type RuleKnowledge struct {
+	Content string
 }
